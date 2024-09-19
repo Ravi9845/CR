@@ -1,0 +1,55 @@
+#
+##########################################################################################
+#
+#    This material is the confidential, proprietary, unpublished property
+#    of Jonas Collections & Recovery.  Receipt or possession of this material
+#    does not convey rights to divulge, reproduce, use, or allow others
+#    to use it without the specific written authorization of Jonas Collections & Recovery
+#    and use must conform strictly to the license agreement.
+#
+#    Copyright (c) 2021 Jonas Collections & Recovery.  All rights reserved.
+#    Version-1.0.0
+#########################################################################################
+#
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudFormation template for creating BpoCloud Ecs-Cluster
+Parameters:
+  crsnamespace:
+    Type: String
+    Description: The Name of the cluster should have the name space namespace and application name.
+
+  crsappname:
+    Type: String
+    Description: The Name of the cluster should have the application name.
+
+  crsenvironment:
+    Type: String
+    Description: The Cluster which need to be build is for which one Dev,RC1,CQA,PROD.
+
+
+Outputs:
+  ecsclustername:
+    Description: The  Name of the cluster for future reference
+    Value: !Ref crscluster
+
+  StackName:
+    Description: The  Name of Stack so we can refer for future purpose
+    Value: !Sub '${AWS::StackName}'
+
+Resources:
+  crscluster:  ##Using Ecs Cluster Resource from Aws
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${crsnamespace}-${crsappname}-cluster' ##Name of the cluster
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Tags:
+        - Key: Environment_Name
+          Value: !Ref crsenvironment
+
+        - Key: Stack_Name
+          Value: !Sub '${AWS::StackName}'
+
+
+#################################End of Cloud formation Template ########################################################
