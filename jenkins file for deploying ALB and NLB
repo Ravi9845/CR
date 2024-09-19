@@ -1,0 +1,866 @@
+def get_build_info() {
+    pr_branch = ''
+    if (env.CHANGE_BRANCH != null) {
+        pr_branch = " (${env.CHANGE_BRANCH})"
+    }
+    build_info = "#${env.BUILD_NUMBER} of <${env.BUILD_URL}|${env.JOB_NAME}>${pr_branch}"
+    return build_info
+}
+
+def abort_jenkins_job() {
+	echo "Currently executed jenkins job is: ${env.JOB_NAME}"
+	currentBuild.result = 'ABORTED'
+}
+
+def new_tenant_flag() {
+	stackNameTemplate = jenkinsJobInfo.StackName + '-' + namespace
+	stackName = stackNameTemplate.replace("TENANTNAME", tenantName)	
+}
+pipeline {
+	agent {
+		label 'ams'
+	}
+	environment {
+		landing_zone = "${env.LZ}"
+		releaseBranch = "${env.ReleaseBranch}"
+		environmentName = "${env.STAGE.toLowerCase()}"
+		cicdAwsRegion = "${env.CICD_REGION}"
+		cicdAssumedRole = 'jenkins-cicd-assumed-role'
+		CICD_REGION_ROLE = ''
+		amsAwsAccount = ''
+		amsAssumedRole = 'customer_jenkins_role' // add as a parameter
+		amsRegion = "${env.AWS_DEPLOYMENT_REGION}"
+		s3DeploymentBucket = "crs-${amsRegion}-cicd-deployment-s3-bucket"
+		dynamodbName = "crs-${env.AWS_DEPLOYMENT_REGION}-cicd-deployment-dynamodb"
+		jenkinsJobName = ''
+		templateFilePath =''
+		templateRfcParamFilePath =''
+		stackName = ''
+		stackVersion = ''
+		stackCurrentVersion = ''
+		stackUpdateVersion = ''
+		stackVersionForDbQuery = ''
+		stackNameVersion = ''
+		stackNameVersionForDbQuery = ''
+		envStatusVersion = ''
+		rfcWaitForStatusTimeoutInMinutes = 15 //default to 15 minutes
+		sign = /#/
+		envDeploymentStatus = ''
+		deploymentInitStatus = 'Init'
+		deploymentSuccessStatus = 'Success'
+		envDeploymentSuccessStatus = ''
+		envDeploymentInitStatus = ''
+		stackStatus = ''
+		stackExecutionOutput = ''
+		stackId = ''
+
+		envJobName = "${env.JOB_NAME}"
+
+		actionType = "${env.Action}"
+		namespace = ''
+		
+		url = ''
+		s3Url = ''
+		cft_params_list = ''
+		cft_tags_list = ''
+		cft_status = ''
+		stackIssues = false
+		queryLatestStatus = ''
+		newTenantFlag = "${env.NewTenantFlag}"
+		tenantName = "${env.TenantName}"
+		newTenantJobName = "${env.NewTenantJobName}"
+	}
+	stages{
+		stage("Set Build ID"){
+      steps {
+        script {
+					currentBuild.displayName = "#${BUILD_NUMBER} - ${environmentName} - ${AWS_DEPLOYMENT_REGION} - ${actionType}"
+        }
+			}
+		}
+		//Stage may no longer be needed as logic is handled in jenkins job
+		/* stage ("Branch check for Advanced vs Accelerate Workload") {
+			steps {
+				script {
+					if ((amsRegion == 'af-south-1' || amsRegion == 'us-east-2')  && releaseBranch.contains('acc-')) {
+						echo "User has selected the Landing Zone: ${LZ}: ${AWS_DEPLOYMENT_REGION}"
+						echo "Selected branch is for AMS Accelerate Account, which is: ${releaseBranch}"
+					}
+					else {
+						echo "User has selected landing zone is: ${landing_zone}" 
+						echo "Selectd branch is for AMS Advanced Account, which is: ${releaseBranch} cancelling the build execution now....."
+						abort_jenkins_job()e
+					}
+				}
+			}
+		} */
+		stage ("Defining LZ Variables") {
+			steps {
+				script {
+					echo "AWS_DEPLOYMENT_REGION: ${amsRegion}"
+					//Determine Variables per Environment
+					amsAwsAccount = "aws_account_id_${environmentName}_${amsRegion.replace("-", "_")}"
+					if (amsRegion == "us-east-2"){
+						amsAwsAccount = "aws_account_id_${environmentName}_acc"
+					}
+					cicdAwsAccount = "aws_account_id_cicd_${cicdAwsRegion.replace("-", "_")}"
+					withCredentials([string(credentialsId: cicdAwsAccount, variable: "AWS_ACCOUNT_ID_CICD")]) {
+						cicdAwsAccount = AWS_ACCOUNT_ID_CICD
+					}
+					withCredentials([string(credentialsId: amsAwsAccount, variable: "AWS_ACCOUNT_ID")]) {
+						amsAwsAccount = AWS_ACCOUNT_ID
+					}
+					switch (AWS_DEPLOYMENT_REGION) {
+						case "us-east-2":
+						CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-afs1'//'jenkins-pipeline-assume-role-acc' once role is created
+						break
+						case "af-south-1":
+						CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-afs1'
+						break
+					}
+					echo "AWS Account ID: ${amsAwsAccount}"
+				}
+			}
+		}
+		stage ("Initializing RFC Parameters") {
+			when {expression { return actionType != 'Delete'}}
+			steps{
+				script{
+					//Initializes Maps and lists
+					def params_list = []
+					def tags_list = []
+					
+					//Takes info passed from CloudFormationParameters Parameter, converts to map, adds to stack_parameters map
+					try{
+						stack_params = env.RFCInformation.split(",")
+						for (int i = 0; i < stack_params.size(); i+=2) {
+							def params = [:]
+							//distinguishes whether to put "Key" or "Name" as the tag for the parameter
+							// Can we set this variable once rather than two ifs?
+							// e.g. stackactiontype == 'Create'? put=="Name":put=="Key"
+							params.put("ParameterKey", stack_params[i].trim())
+							//This should be handled in the RFCInformation entry in the jenkins job
+							if(stack_params[i] == "Namespace"){
+								namespace = stack_params[i+1].trim()
+							}
+							//resumes original logic
+							params_value = stack_params[i+1].trim()
+							//Below should also be handled at the jenkins Job level, not in the pipeline
+							/* if(stack_params[i] == "ECSServiceName"){
+								params.put("Value", params_value.toLowerCase())
+							} */
+							params.put("ParameterValue", params_value)
+							params_list.add(params)
+						}
+						writeJSON file: 'cft_params_list.json', json: params_list
+						archiveArtifacts artifacts: "cft_params_list.json", onlyIfSuccessful: false
+						cft_params_list = readJSON file: "cft_params_list.json"
+						echo "Stack Parameters: ${cft_params_list}"						
+					}
+					catch (ArrayIndexOutOfBoundsException ex) {
+      			print('No RFC Params: ' +ex.toString())
+						currentBuild.result = 'ABORTED'
+        		error("Aborting the build.")
+						throw ex
+					}
+
+					//Takes info passed from RFCTags Parameter, converts to map, adds to stack_parameters map
+					try {
+						stack_tags = env.RFCTags.split(",") //redo serialization
+						for (int i = 0; i < stack_tags.size(); i+=2) {
+							def tags = [:]
+							tags.put("Key", stack_tags[i])
+							tag_value = stack_tags[i+1].trim()
+							tags.put("Value", tag_value)
+							tags_list.add(tags)
+						}
+						
+						writeJSON file: 'cft_tags_list.json', json: tags_list
+						archiveArtifacts artifacts: "cft_tags_list.json", onlyIfSuccessful: false
+						cft_tags_list = readJSON file: 'cft_tags_list.json'
+						echo "Tags: ${cft_tags_list}"
+					}
+					catch (ArrayIndexOutOfBoundsException ex) {
+						println('No Stack Tags: Not all values for Tags have been populated. Please add a value for all Tag fields')
+						println("Error: ${ex.toString()}")
+						currentBuild.result = 'ABORTED'
+						error("Aborting the build.")
+						throw exƒsr
+					}
+				}
+			}
+		}
+		stage ("Initializing manifest file..."){
+			steps {
+				script {
+					//Temp fix for creating resources with different namespace
+					if(!binding.hasVariable('namespace')){
+						if (!env.Namespace){
+							namespace = "dm"
+						}
+						else{
+							namespace = env.Namespace
+						}
+					} 
+					echo "Namespace is: " + namespace
+					
+					echo "Environment name is ${environmentName}, release from branch - ${releaseBranch} "
+					// when calling from groovy
+
+					//when using Jenkinsfile directly
+					JOB_NAME_SPLIT = envJobName.split("/")
+					if (newTenantFlag == "True"){
+						jenkinsJobName = newTenantJobName
+					}
+					else {
+						jenkinsJobName = JOB_NAME_SPLIT[JOB_NAME_SPLIT.size() - 1]
+					}
+					
+
+					echo "Jenkins JOB_NAME is ${jenkinsJobName} "
+					echo "Build info is ${get_build_info()} "
+
+					echo "action type is ${actionType}"
+
+					yamlFilePath = "Deployment/manifest.yaml"
+
+					echo "Manifest file path: ${yamlFilePath}"
+
+					datas = readYaml file: yamlFilePath
+					rfcWaitForStatusTimeoutInMinutes = datas.RfcWaitForStatusTimeoutInMinutes
+
+
+					jenkinsJobInfo = datas.Deployments.JenkinsJobs[jenkinsJobName]
+					// TODO: Each job should have its own Jenkinsfile rather than individual changes
+
+					if (jenkinsJobInfo == null) {
+						error "Config info missing for Jenkins job - ${jenkinsJobName} in manifest file."
+					}
+					// TODO - Investigate these removals
+					templateFilePath = jenkinsJobInfo.CfnTemplateFile
+					templateRfcParamFilePath = "Deployment/Environments/${jenkinsJobName}.json"
+					
+					//Added for NewTenant Logic
+					if (newTenantFlag == "True") {
+						new_tenant_flag()
+					}
+					else {
+						stackName = jenkinsJobInfo.StackName + '-' + namespace
+					}
+					//End new tenant Logic
+					stackVersion = jenkinsJobInfo.StackVersion.trim()
+					//rfcTitle = stackName
+					versionCounter = 0
+
+					echo "Stack Name: ${stackName}"
+
+					switch (actionType){
+						case 'Create':
+							stackVersion = jenkinsJobInfo.StackVersion
+							stackVersionForDbQuery = stackVersion
+							break
+						case 'Update':
+							stackVersion = jenkinsJobInfo.StackVersion
+							stackUpdateVersion = jenkinsJobInfo.StackVersion
+							if (stackUpdateVersion == null || stackUpdateVersion == ''){
+								stackUpdateVersion = 'V1.0.1'
+							}
+							// use the current stack version to query DB for stack-id needed for update
+							stackVersionForDbQuery = jenkinsJobInfo.StackVersion
+							break
+						case 'Delete':
+							stackVersion = jenkinsJobInfo.StackVersion
+							stackVersionForDbQuery = jenkinsJobInfo.StackVersion
+							break
+						default:
+							throw error ('Action type needs to be in (Create, Update, or Delete). ')
+							break
+					}
+
+					templateFileName = templateFilePath//.split('\\.')[0]
+					sh "echo template file name from job is ${templateFileName}"
+					//I do not believe we need to convert the templates to JSON
+					//templateFileName = "${templateFileName}.json"
+					
+					//ARCHIVE MOVED SINCE WE ARE NOT CONVERTING TEMPLATE TO JSON
+					archiveArtifacts artifacts: templateFileName, onlyIfSuccessful: false
+
+					stackNameVersion = stackName + sign + stackVersion
+					stackNameVersion = stackNameVersion.toString()
+					stackNameVersionForDbQuery = stackName + sign + stackVersionForDbQuery
+					stackNameVersionForDbQuery = stackNameVersionForDbQuery.toString()
+					echo "stackNameVersion: ${stackNameVersion}"
+					echo "stackNameVersionForDbQuery: ${stackNameVersionForDbQuery}"
+					// status used for query
+					deploymentStatus = environmentName + sign + "V0"
+					deploymentSuccessStatus = environmentName + sign + deploymentSuccessStatus
+					deploymentInitStatus = environmentName + "-" + deploymentInitStatus
+					// status used for query
+					envDeploymentStatus = environmentName + sign + "V0"
+					envDeploymentSuccessStatus = environmentName + sign + deploymentSuccessStatus
+					envDeploymentInitStatus = environmentName + sign + deploymentInitStatus
+				}
+			}
+		}
+		stage("Querying Dynamodb for existing Stack Info.") {
+			steps {
+				script {
+					withAWS(role: cicdAssumedRole, roleAccount: cicdAwsAccount, region: cicdAwsRegion) {
+
+						// populate data for db query
+						def dbQueryStatusJson = readJSON file: 'Deployment/Db/db-query-status.json'
+
+						dbQueryStatusJson[':StackNameVersion'].S = stackNameVersion
+						//  query for V0 only
+						dbQueryStatusJson[':EnvDeploymentStatus'].S = deploymentStatus
+						writeJSON file: 'db-query-status-0.json', json: dbQueryStatusJson
+
+						sh """
+						aws dynamodb query --table-name ${dynamodbName} \
+							--key-condition-expression \
+								"PK = :StackNameVersion and SK = :EnvDeploymentStatus" \
+							--expression-attribute-values file://db-query-status-0.json \
+							> dynamodb-query-0.json
+						"""
+						archiveArtifacts artifacts: 'db-query-status-0.json', onlyIfSuccessful: false
+						archiveArtifacts artifacts: 'dynamodb-query-0.json', onlyIfSuccessful: false
+
+						def dynamodbQueryResponse = readJSON file: 'dynamodb-query-0.json'
+						queryCount = dynamodbQueryResponse.Count
+						queryStatus = ''
+
+						//query count check
+						echo "query count check 1: ${queryCount}"
+
+						if (queryCount == 0 && (actionType == 'Update' || actionType == 'Delete')) {
+							throw error ("Stack with name - ${stackName} and version - ${stackVersion} needs to be created successfully first before it can be updated or deleted.")
+						}
+
+						if (queryCount == 1){
+								// get the versionCounter
+								versionCounter =  dynamodbQueryResponse.Items[0].VersionCounter.N as Integer
+								sh """
+								echo "version counter is ${versionCounter.toString()}"
+								"""
+								// looking for latest one with Success as status
+								queryStatus = dynamodbQueryResponse.Items[0].Data.S
+								queryActionType = dynamodbQueryResponse.Items[0].Action.S
+								//queryCount = (queryStatus == 'Success') ? 1 : 0
+
+								if (queryCount == 1 && queryActionType == 'Delete' && actionType == 'Create' && queryStatus == 'Success'){
+									// stack created earlier had been deleted successfully,
+									// so allowing it to be created again
+									queryCount = 0
+
+								}
+								else if (queryCount== 1 && queryActionType =='Create' && actionType =='Create' && queryStatus !='Success'){
+									echo "Stack was not previously cleaned up. Attempting to remove the stack before recreation..."
+									stackIssues = true
+									queryLatestStatus = dynamodbQueryResponse.Items[0].LatestStatus.S
+									queryCount = 0
+									}
+								
+
+								else if (queryCount== 1 && queryActionType == 'Delete' && actionType == 'Create'&& queryStatus != 'Success') {
+									throw error ("Stack with name - ${stackName} and version - ${stackVersion} needs to be deleted successfully first before it can be updated or created.")
+								}
+
+								if (queryCount == 1 && (actionType == 'Update' || actionType == 'Delete')) {
+									// need to get ams stack-id for update
+									executionOutput = dynamodbQueryResponse.Items[0].ExecutionOutput.S
+									echo "exectionOutput is ${executionOutput}"
+									//def stackIdJson = readJSON text: executionOutput
+									stackId = dynamodbQueryResponse.Items[0].StackId.S
+									echo "rfc Stack-id is ${stackId}"
+
+									// create a new entry for updating stack
+									queryCount = 0
+								}
+								if (queryCount > 1 ) {
+									throw error ("Stack with name - ${stackName} and version - ${stackVersion} has more instances in the database expected only one.")
+								}
+
+						}
+						dynamodbQueryResult = queryCount
+					}
+				}
+			}
+		}
+		stage("Attempt to clean stacks not properly deleted from rollback or deletion failure"){
+			when{expression {return stackIssues == true}}
+			steps{
+				script {
+					echo "Latest Stack Status: ${queryLatestStatus}"
+					echo "Attempting to remove the stack before re-executing a Create to the same stack"
+					stackDeleted = false
+					while (!stackDeleted){
+						try {
+							withAWS(role: CICD_REGION_ROLE , roleAccount: cicdAwsAccount, region: cicdAwsRegion){
+								withAWS(role: amsAssumedRole, roleAccount: amsAwsAccount, region: AWS_DEPLOYMENT_REGION) 
+								{
+									cft_delete = readJSON text: sh(
+									returnStdout: true,
+									script: "aws cloudformation delete-stack --stack-name ${stackName}"
+									).trim()
+									
+									cft_status_cmd = readJSON text: sh(
+									returnStdout: true,
+									script: "aws cloudformation describe-stacks --stack-name ${stackName}"
+									).trim()
+									cft_status = cft_status_cmd.Stacks[0].StackStatus
+
+									echo "CloudFormation Status: ${cft_status}"
+									if (cft_status.contains("IN_PROGRESS")){
+										sleep(60)
+									}
+									else {
+										echo "Cloudformation template has completed with status ${cft_status}"
+										/* if (cft_status.contains("FAILED")){
+											echo "Stack ${stackName} has been deployed successfully!"
+											stackStatus = "Failed"
+											cft_status_failed_cmd = readJSON text: sh(
+												returnStdout: true,
+												script: "aws cloudformation describe-stack-events --stack-name ${stackName}"
+											).trim()
+											cft_status_failed_cmd.StackEvents.each { event ->
+												if (event.ResourceStatus.contains("FAILED")) {
+													echo "Stack Failure Reason: ${event.ResourceStatusReason}"
+													stackExecutionOutput = event.ResourceStatusReason
+													error(stackExecutionOutput)
+												}
+											}
+										} */
+										stackDeleted = true
+									}
+								}
+							}
+						}
+						catch(err) {
+							withAWS(role: CICD_REGION_ROLE , roleAccount: cicdAwsAccount, region: cicdAwsRegion){
+								withAWS(role: amsAssumedRole, roleAccount: amsAwsAccount, region: AWS_DEPLOYMENT_REGION) 
+								{
+									cft_status_cmd = readJSON text: sh(
+										returnStdout: true,
+										script: "aws cloudformation list-stacks --stack-status-filter 'DELETE_COMPLETE'"
+									).trim()
+									cft_status_cmd.StackSummaries.each { stack -> 
+										if (stack.StackName == stackName){
+											cft_status = "DELETE_COMPLETE"
+										}
+									}
+								}
+							}
+							stackDeleted = true
+						}
+					}
+				}
+			}
+		}
+		stage("Querying Dynamodb for Stack Info needed for Update.") {
+			when {expression { return actionType == 'Update'}}
+			steps {
+				script {
+					withAWS(role: cicdAssumedRole, roleAccount: cicdAwsAccount, region: cicdAwsRegion) {
+
+						// use update version
+						stackNameVersion = stackName + sign + stackUpdateVersion
+
+						// populate data for db query
+						def dbQueryStatusJson = readJSON file: 'Deployment/Db/db-query-status.json'
+
+						dbQueryStatusJson[':StackNameVersion'].S = stackNameVersion
+						//  query for V0 only
+						dbQueryStatusJson[':EnvDeploymentStatus'].S = envDeploymentStatus
+						writeJSON file: 'db-query-status-update.json', json: dbQueryStatusJson
+
+						sh """
+						aws dynamodb query --table-name ${dynamodbName} \
+							--key-condition-expression \
+							"PK = :StackNameVersion and SK = :EnvDeploymentStatus" \
+							--expression-attribute-values file://db-query-status-update.json \
+							> dynamodb-query-update.json
+						"""
+						archiveArtifacts artifacts: 'db-query-status-update.json', onlyIfSuccessful: false
+						archiveArtifacts artifacts: 'dynamodb-query-update.json', onlyIfSuccessful: false
+
+						def dynamodbQueryResponse = readJSON file: 'dynamodb-query-update.json'
+						queryCount = dynamodbQueryResponse.Count
+						queryStatus = ''
+
+						if (queryCount == 1){
+							// get the versionCounter for update stack
+							versionCounter =  dynamodbQueryResponse.Items[0].VersionCounter.N as Integer
+							sh """
+								echo "version counter for Update action is ${versionCounter.toString()}"
+							"""
+							// create a new entry for updating stack regardless the status of existing update stack
+							queryCount = 0
+						}
+						else {
+							versionCounter = 0
+						}
+						dynamodbQueryResult = queryCount
+					}
+				}
+			}
+		}
+		stage ("Determining stack status from previous deployment if any."){
+			when {expression { return dynamodbQueryResult == 0}}
+			stages("continuing the deployment ..."){
+				stage ("Running scan for detect-secrets"){
+					steps{
+						withEnv(["HOME=${env.WORKSPACE}"]) {
+							sh "detect-secrets scan >secrets.baseline "
+						}
+						archiveArtifacts artifacts: 'secrets.baseline', onlyIfSuccessful: false
+					}
+				}
+				stage("Validating CFN") {
+					steps {
+						script {
+							withAWS(role: cicdAssumedRole, roleAccount: cicdAwsAccount, region: cicdAwsRegion) {
+								def output = cfnValidate(file: templateFileName)
+								sh """
+								echo "CFN Validation output is ${output}"
+								"""
+							}
+						}
+					}
+				}
+				stage ("Running cft-lint with custom AMS rules"){
+					steps{
+						withEnv(["HOME=${env.WORKSPACE}"]) {
+							//sh "cfn-lint ${templateFileName} "
+							sh """cfn-lint --template ${templateFileName} --append-rules "./cfn-lint-custom-rules/rules/" """
+						}
+					}
+				}
+				stage("Uploading CFN to S3 Deployment Bucket") {
+					steps {
+						script {
+							withAWS(role: cicdAssumedRole, roleAccount: cicdAwsAccount, region: cicdAwsRegion) {
+								def s3KeyPath = "${environmentName}/${stackName}/${stackVersion}/${templateFileName}"
+								def output = s3Upload(pathStyleAccessEnabled: true,
+									payloadSigningEnabled: true,
+									file: templateFileName,
+									bucket: s3DeploymentBucket,
+									path: s3KeyPath
+								)
+								s3Url = "https://${s3DeploymentBucket}.s3.amazonaws.com/${s3KeyPath}"
+								//url will need to be defined as a global variable. adding intialization at the beginning of the code
+								url = s3PresignURL(
+									bucket: s3DeploymentBucket,
+									key: s3KeyPath,
+									durationInSeconds: 3600) //60 minutes
+								// update parameter file here
+								// expect to populate only the vpc-id and s3-rul in the parameter file
+
+								//The below field was part of the original rfc deployment pipeline. We will need to test what variables are needed for the new stages
+								/* if (actionType != 'Delete') {
+									rfcparams.CloudFormationTemplateS3Endpoint = url
+									rfcparams.TimeoutInMinutes = 120
+								}
+								if (actionType == 'Update' || actionType == 'Delete') {
+									rfcparams.StackId = rfcStackId
+								}
+
+								echo "${rfcparams}" */
+
+
+									// all other parameters should be pre-populated already
+									// or need to find a way to override
+									// def parameters = rfcparams.Parameters
+									// rfcparams.Parameters[0].Value = 'settingParameterValue'
+
+								//The below field was part of the original rfc deployment pipeline. We will need to test what variables are needed for the new stages
+								/* writeJSON file: templateRfcParamFilePath, json: rfcparams
+								archiveArtifacts artifacts: templateRfcParamFilePath, onlyIfSuccessful: false */
+
+
+							}
+						}
+					}
+				}
+				stage("Dynamodb put-item with Initial Status - Init"){
+					steps {
+						script {
+							withAWS(role: cicdAssumedRole, roleAccount: cicdAwsAccount, region: cicdAwsRegion) {
+
+								def DATETIME_TAG = java.time.LocalDateTime.now().toString()
+								def itemInit = readJSON file: 'Deployment/Db/db-put-init.json'
+
+								itemInit.PK.S = stackNameVersion.toString()
+								// TODO, increase version counter by 1
+								versionCounter = versionCounter + 1
+								itemInit.SK.S = environmentName + sign + "V" + versionCounter.toString()
+								itemInit.TimeStamp.S = DATETIME_TAG
+								itemInit.Region.S = amsRegion
+								itemInit.Action.S = actionType
+								if (actionType == 'Update' || actionType == 'Delete') {
+									itemInit.StackId.S = stackId
+								}
+								else{
+									itemInit.StackId.S = stackName.toString()
+								}
+
+								writeJSON file: 'db-put-init-0.json', json: itemInit
+								archiveArtifacts artifacts: 'db-put-init-0.json', onlyIfSuccessful: false
+
+								sh """
+										aws dynamodb put-item --table-name ${dynamodbName} \
+											--item file://db-put-init-0.json \
+
+								"""
+
+
+								// TODO: check versionCounter from db query
+								// if =1, new item, then do the put-item for V0
+								// if >1, existing item, then do the update for V0
+
+								if (versionCounter == 1){
+
+									itemInit = readJSON file: 'db-put-init-0.json'
+
+									itemInit.SK.S = envDeploymentStatus
+									itemInit["LatestStatus"] = ["S": "Init"]
+									itemInit["UpdatedTimeStamp"] = ["S": DATETIME_TAG]
+									itemInit["VersionCounter"] = ["N": versionCounter.toString()]
+
+									writeJSON file: 'db-put-init-1.json', json: itemInit
+									archiveArtifacts artifacts: 'db-put-init-1.json', onlyIfSuccessful: false
+
+									sh """
+									aws dynamodb put-item --table-name ${dynamodbName} \
+										--item file://db-put-init-1.json \
+
+									"""
+
+								}
+								else {
+
+									// update V0 row
+									// update key, names and values files
+									updateKey = readJSON file: 'Deployment/Db/db-update-key.json'
+									updateKey.PK.S = stackNameVersion.toString()
+									updateKey.SK.S = envDeploymentStatus
+									writeJSON file: 'db-update-key.json', json: updateKey
+									archiveArtifacts artifacts: 'db-update-key.json', onlyIfSuccessful: false
+
+									updateValues = readJSON file: "Deployment/Db/db-update-exp-attr-v0-values.json"
+									updateValues[":UTS"].S = DATETIME_TAG
+									updateValues[":DATA"].S = 'Init'
+									updateValues[":LS"].S = 'Init'
+									updateValues[":AN"].S = actionType
+									writeJSON file: 'db-update-exp-attr-v0-values.json', json: updateValues
+									archiveArtifacts artifacts: 'db-update-exp-attr-v0-values.json', onlyIfSuccessful: false
+
+									sh """
+									aws dynamodb update-item \
+										--table-name ${dynamodbName} \
+										--key file://db-update-key.json \
+										--update-expression "SET #VC = #VC + :VC, #UTS = :UTS, #DATA = :DATA, #LS = :LS, #AN = :AN" \
+										--expression-attribute-names file://Deployment/Db/db-update-exp-attr-v0-names.json \
+										--expression-attribute-values file://db-update-exp-attr-v0-values.json  \
+
+									"""
+								}
+
+							}
+						}
+					}
+				}
+				
+				stage("Deploy CloudFormation Stack") {
+					steps {
+						script {
+							try{
+								echo "AMS Assumed Role: ${amsAssumedRole}"
+								withAWS(role: CICD_REGION_ROLE , roleAccount: cicdAwsAccount, region: cicdAwsRegion){
+									withAWS(role: amsAssumedRole, roleAccount: amsAwsAccount, region: AWS_DEPLOYMENT_REGION) {
+										switch(actionType) {
+											case "Create":
+												create_stack_cmd = readJSON text: sh(
+													returnStdout: true,
+													script: "aws cloudformation create-stack --stack-name ${stackName} --template-url ${s3Url} --parameters file://cft_params_list.json --tags file://cft_tags_list.json"
+												).trim()
+												stackId = create_stack_cmd.StackId
+												echo "StackId: ${stackId}"
+												break
+											
+											case "Update":
+												update_stack_cmd = readJSON text: sh(
+													returnStdout: true,
+													script: "aws cloudformation update-stack --stack-name ${stackName} --template-url ${s3Url} --parameters file://cft_params_list.json --tags file://cft_tags_list.json"
+												).trim()
+												stackId = update_stack_cmd.StackId
+												echo "StackId: ${stackId}"
+												break
+
+											case "Delete":
+												sh """
+												aws cloudformation delete-stack --stack-name ${stackName}
+												"""
+												break
+										}
+									}
+								}
+							}
+							catch(err){
+								echo ("ERROR caught - ${err}")
+								echo (err.getMessage())
+								throw err
+							}
+						}
+					}
+				}
+				stage('Get CloudFormation Stack Status') {
+					steps {
+						timeout(time: rfcWaitForStatusTimeoutInMinutes, unit: 'MINUTES') {
+							waitUntil {
+								script {
+									withAWS(role: CICD_REGION_ROLE , roleAccount: cicdAwsAccount, region: cicdAwsRegion){
+										withAWS(role: amsAssumedRole, roleAccount: amsAwsAccount, region: AWS_DEPLOYMENT_REGION) {
+											try {
+												echo 'Waiting for status from CloudFormation stack...'
+
+												cft_status_cmd = readJSON text: sh(
+													returnStdout: true,
+													script: "aws cloudformation describe-stacks --stack-name ${stackName}"
+												).trim()
+												cft_status = cft_status_cmd.Stacks[0].StackStatus
+
+												echo "CloudFormation Status: ${cft_status}"
+											}
+											catch(err) {
+												cft_status_cmd = readJSON text: sh(
+													returnStdout: true,
+													script: "aws cloudformation list-stacks --stack-status-filter 'DELETE_COMPLETE'"
+												).trim()
+												cft_status_cmd.StackSummaries.each { stack -> 
+													if (stack.StackName == stackName){
+														cft_status = "DELETE_COMPLETE"
+													}
+												}
+											}
+											
+
+											if (cft_status.contains("IN_PROGRESS")){
+												sleep(60)
+												return false
+												
+											}
+											else {
+												echo "Cloudformation template has completed with status ${cft_status}"
+												stackStatus = "Success"
+												stackExecutionOutput = "Success"
+												
+												if (cft_status.contains("ROLLBACK")){
+													stackStatus = "Failed"
+													cft_status_failed_cmd = readJSON text: sh(
+														returnStdout: true,
+														script: "aws cloudformation describe-stack-events --stack-name ${stackName}"
+													).trim()
+													cft_status_failed_cmd.StackEvents.each { event ->
+														if (event.ResourceStatus.contains("FAILED")) {
+															echo "Stack Failure Reason: ${event.ResourceStatusReason}"
+															stackExecutionOutput = event.ResourceStatusReason
+														}
+													}
+												}
+												return true
+											} 
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				stage("Dynamodb put-item with Final Status. ") {
+						steps {
+							script {
+								withAWS(role: cicdAssumedRole, roleAccount: cicdAwsAccount, region: cicdAwsRegion) {
+
+									DATETIME_TAG = java.time.LocalDateTime.now().toString()
+
+									def itemFinal = readJSON file: 'Deployment/Db/db-put-final.json'
+
+									itemFinal.PK.S = stackNameVersion.toString()
+									// TODO: increase version counter
+									versionCounter = versionCounter + 1
+									itemFinal.SK.S = environmentName + sign + "V" + versionCounter.toString()
+
+									echo "DATETIME_TAG: ${DATETIME_TAG}"
+									echo "stackStatus: ${stackStatus}"
+									echo "amsRegion: ${amsRegion}"
+									echo "stackExecutionOutput: ${stackExecutionOutput}"
+									echo "cftStatus: ${cft_status}"
+									echo "actionType: ${actionType}"
+									// TODO: Remove timestamp, VPC, Region
+									itemFinal.TimeStamp.S = DATETIME_TAG
+									echo "itemFinal.TimeStamp.S is ok"
+									itemFinal.Data.S = stackStatus
+									echo "itemFinal.Data.S is ok"
+									itemFinal.Region.S = amsRegion
+									echo "itemFinal.Region.S is ok"
+									itemFinal.ExecutionOutput.S = stackExecutionOutput
+									echo "itemFinal.ExecutionOutput.S is ok"
+									itemFinal.Action.S = actionType
+									echo "itemFinal.Action.S is ok"
+									itemFinal.StackId.S = stackId
+									echo "itemFinal.StackId.S is ok"
+									writeJSON file: 'db-put-final.json', json: itemFinal
+									archiveArtifacts artifacts: 'db-put-final.json', onlyIfSuccessful: false
+
+									sh """
+									aws dynamodb put-item --table-name ${dynamodbName} \
+										--item file://db-put-final.json \
+
+									"""
+									// update V0 row
+									// update key, names and values files
+									updateKey = readJSON file: 'Deployment/Db/db-update-key.json'
+									updateKey.PK.S = stackNameVersion.toString()
+									updateKey.SK.S = envDeploymentStatus
+									writeJSON file: 'db-update-key.json', json: updateKey
+
+									updateValues = readJSON file: "Deployment/Db/db-update-exp-attr-values.json"
+									updateValues[":UTS"].S = DATETIME_TAG
+									updateValues[":DATA"].S = stackStatus
+									updateValues[":LS"].S = cft_status
+									updateValues[":EO"].S = stackExecutionOutput
+									updateValues[":AN"].S = actionType
+									updateValues[":SID"].S = stackName.toString()
+
+									writeJSON file: 'db-update-exp-attr-values.json', json: updateValues
+									archiveArtifacts artifacts: 'db-update-exp-attr-values.json', onlyIfSuccessful: false
+
+									sh """
+									aws dynamodb update-item \
+										--table-name ${dynamodbName} \
+										--key file://db-update-key.json \
+										--update-expression "SET #VC = #VC + :VC, #UTS = :UTS, #DATA = :DATA, #LS = :LS, #EO = :EO, #AN = :AN, #SID = :SID" \
+										--expression-attribute-names file://Deployment/Db/db-update-exp-attr-names.json \
+										--expression-attribute-values file://db-update-exp-attr-values.json  \
+
+									"""
+								}
+							}
+						}
+					}
+					stage ("Throw error when CloudFormation Stack Fails."){
+					when {expression { return (stackStatus != "Success")}}
+					steps{
+						error(stackExecutionOutput)
+					}
+				}
+			}
+		}
+		stage ("Stack has been deployed before"){
+			when {expression { return dynamodbQueryResult != 0}}
+			steps{
+				echo "Stack '${stackName}' with version - '${stackVersion}' has been deployed before."
+			}		
+		}
+	}
+}
