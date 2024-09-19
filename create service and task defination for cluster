@@ -1,0 +1,169 @@
+#
+#########################################################################################
+#
+#    This material is the confidential, proprietary, unpublished property
+#    of Jonas Collections & Recovery.  Receipt or possession of this material
+#    does not convey rights to divulge, reproduce, use, or allow others
+#    to use it without the specific written authorization of Jonas Collections & Recovery
+#    and use must conform strictly to the license agreement.
+#
+#    Copyright (c) 2024 Jonas Collections & Recovery.  All rights reserved.
+#    Version-1.0.0
+#########################################################################################
+#
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudFormation template to create a service for DM BPO UI container in ECS
+Parameters:
+  Namespace:
+    Type: String
+    Default: dm
+  TaskCPU:
+    Type: Number
+    Default: 1024
+  TaskMemory:
+    Type: Number
+    Default: 2048
+  executionrole:
+    Type: String
+    Default: customer_ecs_custom_role
+  taskrole:
+    Type: String
+    Default: customer_ecs_custom_role
+  ImageName:
+    Type: String
+    Description: The ecr image for bpo-ui.
+  efsid:
+    Type: String
+    Description: The efs id for nginx config.
+  VPCidr:
+    Type: String
+    Description: The VPC CIDR.
+  ListenerpvtlinkUI:
+    Type: String
+    Description: The arn of private link application load balancer listener.
+  UITaskSecurityGroup:
+    Type: CommaDelimitedList
+    Description: The security group for bpo ui service.
+
+Outputs:
+  Targetname:
+    Value: !Ref DmBpoUiService
+
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '${Namespace}-bpo-ui-container'
+
+  ListenerRuleBpoUI:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref bpoUIServiceTargetGroup
+      Conditions:
+        - Field: path-pattern
+          Values: 
+            - '/bpo*'       
+      ListenerArn: !Ref  ListenerpvtlinkUI
+      Priority: 200  
+      
+  bpoUIServiceTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPath: '/'
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPort: 443
+      HealthCheckTimeoutSeconds: 5
+      HealthCheckEnabled: true
+      UnhealthyThresholdCount: 3
+      HealthCheckProtocol: HTTPS
+      Name: !Sub '${Namespace}-bpo-ui-tg'
+      VpcId: '{{resolve:ssm:dm-vpc-VPCId:1}}'
+      TargetType: ip
+      Protocol: HTTPS
+      Port: 443
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: true
+        - Key: stickiness.type
+          Value: lb_cookie
+      Tags:
+        - Key: Name
+          Value: 'pvtlink-ui-tg'
+
+  DmBpoUIdefiniton:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      RequiresCompatibilities:
+        - FARGATE
+      Family: !Sub '${Namespace}-bpo-ui'
+      Cpu: !Ref TaskCPU
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      TaskRoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${taskrole}'
+      ExecutionRoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${executionrole}'
+      Volumes:
+        - Name: !Sub ${Namespace}-bpo-nginx-server
+          EFSVolumeConfiguration:
+            FilesystemId: !Ref efsid
+            AuthorizationConfig:
+              IAM: DISABLED
+            TransitEncryption: ENABLED
+            RootDirectory: '/fitapps/nginx/config'
+        - Name: !Sub ${Namespace}-bpo-nginx-cert
+          EFSVolumeConfiguration:
+            FilesystemId: !Ref efsid
+            AuthorizationConfig:
+              IAM: DISABLED
+            TransitEncryption: ENABLED
+            RootDirectory: !Sub '/fitapps/nginx/cert'
+      ContainerDefinitions:
+        - Name: !Sub '${Namespace}-bpo-ui-container'
+          Image: !Ref ImageName
+          MountPoints:
+            - SourceVolume: !Sub ${Namespace}-bpo-nginx-server
+              ContainerPath: '/usr/share/nginx/servers'
+            - SourceVolume: !Sub ${Namespace}-bpo-nginx-cert
+              ContainerPath: '/usr/share/nginx/cert'
+          LinuxParameters:
+            Capabilities:
+              Add:
+                - "SYS_PTRACE"
+          PortMappings:
+            - ContainerPort: 443
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-group: !Ref  LogGroup
+              awslogs-stream-prefix: ecs
+  DmBpoUiService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub '${Namespace}-bpo-ui'
+      Cluster: dm-bpocloud-cluster
+      TaskDefinition: !Ref DmBpoUIdefiniton
+      EnableExecuteCommand: true
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - '{{resolve:ssm:dm-vpc-PrivateSubnet2AZ1:1}}'
+            - '{{resolve:ssm:dm-vpc-PrivateSubnet2AZ2:1}}'
+            - '{{resolve:ssm:dm-vpc-PrivateSubnet2AZ3:1}}'
+          SecurityGroups: !Ref UITaskSecurityGroup
+      LoadBalancers:
+        - ContainerName: !Sub '${Namespace}-bpo-ui-container'
+          ContainerPort: 443
+          TargetGroupArn: !Ref bpoUIServiceTargetGroup
+      Tags:
+        - Key: 'Application'
+          Value: !Sub '${Namespace}-bpo-ui'
+
+#################################End of Cloud formation Template ########################################################
