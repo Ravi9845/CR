@@ -1,0 +1,212 @@
+pipeline {
+  agent {
+		label 'ams'
+	}
+  environment{
+    AWS_DEPLOYMENT_REGION = "$env.AWS_DEPLOYMENT_REGION"
+    STAGE = "$env.STAGE"
+    AWS_CREDENTIAL = "aws_account_id_${STAGE.toLowerCase()}_${AWS_DEPLOYMENT_REGION.replace('-', '_')}"
+		AWS_ACCOUNT_ID = ''
+    AWS_IAM_ROLE_NAME = 'customer-environment-shutdown-startup'
+    CICD_REGION = 'us-east-1'
+    CICD_REGION_ROLE = ''
+		CICD_CREDENTIAL = 'aws_account_id_cicd_us_east_1'
+		CICD_ACCOUNT_ID = ''
+  }
+  stages {
+    stage('Setup Environment') {
+			steps {
+				script {
+					switch (AWS_DEPLOYMENT_REGION) {
+						case "us-east-1":
+							CICD_REGION_ROLE = 'jenkins-pipeline-assume-role'
+							break
+						case "eu-west-2":
+							CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-euw2'
+							break
+						case "eu-central-1":
+              CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-euc1'
+							break
+					}
+					withCredentials([string(credentialsId: CICD_CREDENTIAL, variable: 'CICD_ACCOUNT')]) {
+						CICD_ACCOUNT_ID = CICD_ACCOUNT
+					}
+
+					withCredentials([string(credentialsId: AWS_CREDENTIAL, variable: 'ACCOUNT_ID')]) {
+						AWS_ACCOUNT_ID = ACCOUNT_ID
+					}
+				}
+			}
+    }
+    stage('Start All RDS Clusters'){
+      steps {
+        script {
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+              db_cluster_response = sh(
+                script: "aws rds describe-db-clusters --query DBClusters[*].DBClusterIdentifier | xargs", returnStdout:true
+              ).trim()
+              db_clusters = db_cluster_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+              db_clusters.each{db ->
+                db_stop = sh(
+                  script: "aws rds start-db-cluster --db-cluster-identifier $db |  xargs", returnStdout:true
+                ).trim()
+                db_status = sh(
+                  script: "aws rds describe-db-clusters --db-cluster-identifier $db --query DBClusters[0].Status | xargs", returnStdout:true
+                ).trim()
+                echo "DB Status: $db_status"
+                while(db_status != "available"){
+                  echo "DB Cluster Not Available. Sleeping for 60 seconds..."
+                  sleep(60)
+                  db_status = sh(
+                    script: "aws rds describe-db-clusters --db-cluster-identifier $db --query DBClusters[0].Status | xargs", returnStdout:true
+                  ).trim()
+                  echo "DB Status: $db_status"
+                }
+              }    
+            }
+          echo "DB Cluster(s) is available. Proceeding to Start EC2 Instances..."
+          }
+        }
+      }
+    }
+    stage('Start All EC2 Instances'){
+      steps{
+        script{
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+              ec2_response = sh(
+                script: "aws ec2 describe-instances --query Reservations[*].Instances[*].InstanceId | xargs", returnStdout:true
+              ).trim()
+              ec2_list = ec2_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+              instance_count = ec2_list.size()
+              ec2_list.each{ec2 ->
+                try{
+                  start_instances = sh(
+                    script: "aws ec2 start-instances --instance-ids $ec2", returnStdout:true
+                  ).trim()
+                }
+                catch(err){
+                  echo "ERROR CAUGHT: $err"
+                  instance_count--
+                }
+              }
+              instances_ready = 0
+              echo ("INSTANCE COUNT: $instance_count")
+              while(instances_ready != instance_count){
+                ec2_list.each{ec2 ->
+                  ec2_state = sh(
+                    script: "aws ec2 describe-instances --query Reservations[0].Instances[0].State.Name | xargs", returnStdout:true
+                  ).trim()
+                  ec2_status = sh(
+                    script: "aws ec2 describe-instance-status --instance-id $ec2 --query InstanceStatuses[0].InstanceStatus.Status | xargs", returnStdout:true
+                  ).trim()
+                  echo "Current State for $ec2: $ec2_state,   Current Status for $ec2: $ec2_status"
+                  if (ec2_status != "ok"){
+                    echo "$ec2 is not in an available state."
+                  }
+                  else{
+                    instances_ready++
+                    echo "$ec2 is available.. available count is $instances_ready"
+                  }
+                }
+                echo "INSTANCES READY: $instances_ready"
+                if (instances_ready != instance_count) {
+                  echo "There are still ${instance_count - instances_ready} instances not in an available state. Please wait 2 minutes for update...."
+                  instances_ready = 0
+                  sleep(120)
+                }
+                else{
+                  echo "All instances are in an available state. Proceeding to Resume Autoscaling Actions..."
+                }
+              }
+            }
+          }    
+        }
+      }
+    }
+ //   stage('Resume Auto-Scaling Group Actions') {
+  //    steps{
+  //      script{
+  //        withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+  //          withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+  //            asg_list_response = sh(
+  //              script: "aws autoscaling describe-auto-scaling-groups --query AutoScalingGroups[*].AutoScalingGroupName | xargs", returnStdout:true
+  //            ).trim()
+  //            asgs = asg_list_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+  //            echo "Autoscaling groups: $asgs"
+  //            asgs.each {asg -> 
+  //              sus_process = sh(
+  //                script: "aws autoscaling resume-processes --auto-scaling-group-name $asg --scaling-processes Launch Terminate ReplaceUnhealthy HealthCheck"
+  //              )
+  //            }
+  //          }
+  //        }
+  //        echo "Proceeding to Start ECS Services..."
+  //      }
+  //    }
+  //  }
+    stage('Scale Up ECS Service') {
+      steps{
+        script{
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+              //Get list of ECS Clusters
+              list_clusters_response = sh (
+                script: "aws ecs list-clusters --query clusterArns | xargs", returnStdout: true
+              ).trim()
+              clusters = list_clusters_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+              //Loop though each ECS cluster to get list of Services
+              clusters.each { cluster ->
+                list_services_response = sh (
+                  script: "aws ecs list-services --cluster $cluster --query serviceArns| xargs",returnStdout: true
+                ).trim()
+                echo "$list_services_response"
+                //Puts output in array format
+                services = list_services_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+                //Loops through each service to change the desired service count
+                batch_services = []
+                non_batch_services = []
+                services.each { service ->
+                  if (service.contains("Batch")){
+                    batch_services.add(service)
+                  }
+                  else{
+                    non_batch_services.add(service)
+                  }
+                }
+                batch_services.each {service ->
+                  desired_count = ""
+                  if (service.contains("dm")) {
+                    desired_count = "2"
+                  }
+                  else {
+                    desired_count = "2"
+                  }
+                  scale_services = sh (
+                    script: "aws ecs update-service --cluster $cluster --service $service --desired-count $desired_count | xargs", returnStdout: true
+                  ).trim()
+                  echo "60 required wait for Batch"
+                  sleep(60)
+                }
+                non_batch_services.each {service ->
+                  desired_count = ""
+                  if (service.contains("bpo")){
+                    desired_count = "1"
+                  }
+                  else {
+                    desired_count = "2"
+                  }
+                  scale_services = sh (
+                    script: "aws ecs update-service --cluster $cluster --service $service --desired-count $desired_count | xargs", returnStdout: true
+                  ).trim()
+                }
+              }
+            }
+          }
+          echo "Environment is now up and available. Please confirm applications are running properly"
+        }
+      }
+    }
+  }
+}
