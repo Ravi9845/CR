@@ -1,0 +1,163 @@
+pipeline {
+  agent any
+  environment {
+    CICD_REGION = "your-cicd-region"
+    CICD_ACCOUNT_ID = "your-cicd-account-id"
+    CICD_REGION_ROLE = "your-cicd-region-role"
+    AWS_DEPLOYMENT_REGION = "your-deployment-region"
+    AWS_ACCOUNT_ID = "your-aws-account-id"
+    AWS_IAM_ROLE_NAME = "your-aws-iam-role"
+  }
+  stages {
+    
+    stage('Start All RDS Clusters') {
+      steps {
+        script {
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+              db_cluster_response = sh(
+                script: "aws rds describe-db-clusters --query DBClusters[*].DBClusterIdentifier | xargs", returnStdout: true
+              ).trim()
+              db_clusters = db_cluster_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+              db_clusters.each { db ->
+                db_start = sh(
+                  script: "aws rds start-db-cluster --db-cluster-identifier $db | xargs", returnStdout: true
+                ).trim()
+                db_status = sh(
+                  script: "aws rds describe-db-clusters --db-cluster-identifier $db --query DBClusters[0].Status | xargs", returnStdout: true
+                ).trim()
+                echo "DB Status: $db_status"
+                while (db_status != "available") {
+                  echo "DB Cluster Not Available. Sleeping for 60 seconds..."
+                  sleep(60)
+                  db_status = sh(
+                    script: "aws rds describe-db-clusters --db-cluster-identifier $db --query DBClusters[0].Status | xargs", returnStdout: true
+                  ).trim()
+                  echo "DB Status: $db_status"
+                }
+              }
+              echo "DB Cluster(s) is available. Proceeding to Start ECS Cluster..."
+            }
+          }
+        }
+      }
+    }
+
+    stage('Start ECS Cluster') {
+      steps {
+        script {
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+              // Assume you already have a cluster name
+              cluster_name = "your-ecs-cluster-name"
+              
+              // Check if the ECS cluster exists
+              cluster_response = sh(
+                script: "aws ecs describe-clusters --clusters $cluster_name --query clusters[0].status | xargs", returnStdout: true
+              ).trim()
+              
+              if (cluster_response == "ACTIVE") {
+                echo "ECS Cluster $cluster_name is already active."
+              } else {
+                echo "Starting ECS Cluster $cluster_name..."
+                // You typically do not need to start an ECS cluster as it is active by default once created,
+                // but you can check the status as shown above.
+              }
+            }
+          }
+          echo "ECS Cluster is active. Proceeding to Start ECS Services..."
+        }
+      }
+    }
+
+    stage('Start ECS Services') {
+      steps {
+        script {
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+              // Get list of ECS Services
+              list_services_response = sh(
+                script: "aws ecs list-services --cluster your-ecs-cluster-name --query serviceArns | xargs", returnStdout: true
+              ).trim()
+              services = list_services_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+
+              services.each { service ->
+                echo "Starting ECS Service: $service"
+                // Update the desired count to start the service
+                start_service = sh(
+                  script: "aws ecs update-service --cluster your-ecs-cluster-name --service $service --desired-count 2 | xargs", returnStdout: true
+                ).trim()
+
+                // Check the status of the service
+                service_status = sh(
+                  script: "aws ecs describe-services --cluster your-ecs-cluster-name --services $service --query services[0].status | xargs", returnStdout: true
+                ).trim()
+                echo "Service $service Status: $service_status"
+
+                // Wait until the service is active
+                while (service_status != "ACTIVE") {
+                  echo "Service $service is not active yet. Waiting for 30 seconds..."
+                  sleep(30)
+                  service_status = sh(
+                    script: "aws ecs describe-services --cluster your-ecs-cluster-name --services $service --query services[0].status | xargs", returnStdout: true
+                  ).trim()
+                }
+                echo "Service $service is now ACTIVE."
+              }
+            }
+          }
+          echo "All ECS Services are now started and active."
+        }
+      }
+    }
+
+    // Other stages (e.g., Scale Up ECS Service) can follow here...
+  }
+}
+====================================================================
+stage('Start ECS Services') {
+  steps {
+    script {
+      withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+        withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+          // Get list of ECS Services
+          list_services_response = sh(
+            script: "aws ecs list-services --cluster your-ecs-cluster-name --query serviceArns | xargs", returnStdout: true
+          ).trim()
+          services = list_services_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+
+          services.each { service ->
+            echo "Checking status of ECS Service: $service"
+
+            // Check the current status of the service
+            service_status = sh(
+              script: "aws ecs describe-services --cluster your-ecs-cluster-name --services $service --query services[0].status | xargs", returnStdout: true
+            ).trim()
+            echo "Service $service Status: $service_status"
+
+            // If the service is not ACTIVE, attempt to start it
+            if (service_status != "ACTIVE") {
+              echo "Starting ECS Service: $service"
+              start_service = sh(
+                script: "aws ecs update-service --cluster your-ecs-cluster-name --service $service --desired-count 1 | xargs", returnStdout: true
+              ).trim()
+
+              // Wait until the service is active
+              while (service_status != "ACTIVE") {
+                echo "Service $service is not active yet. Waiting for 30 seconds..."
+                sleep(30)
+                service_status = sh(
+                  script: "aws ecs describe-services --cluster your-ecs-cluster-name --services $service --query services[0].status | xargs", returnStdout: true
+                ).trim()
+              }
+              echo "Service $service is now ACTIVE."
+            } else {
+              echo "Service $service is already ACTIVE."
+            }
+          }
+        }
+      }
+      echo "All ECS Services have been checked and started if necessary."
+    }
+  }
+}
