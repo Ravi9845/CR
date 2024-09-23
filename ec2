@@ -1,99 +1,63 @@
-pipeline {
-    agent {
-        label 'ams'
-    }
-    environment {
-        AWS_DEPLOYMENT_REGION = "$env.AWS_DEPLOYMENT_REGION"
-        STAGE = "$env.STAGE"
-        AWS_CREDENTIAL = "aws_account_id_${STAGE.toLowerCase()}_${AWS_DEPLOYMENT_REGION.replace('-', '_')}"
-        AWS_ACCOUNT_ID = ''
-        AWS_IAM_ROLE_NAME = 'customer-environment-shutdown-startup'
-        CICD_REGION = 'us-east-1'
-        CICD_REGION_ROLE = ''
-        CICD_CREDENTIAL = 'aws_account_id_cicd_us_east_1'
-        CICD_ACCOUNT_ID = ''
-        EC2_Instance = "$env.EC2_Instance"
-    }
-    stages {
-        stage('Setup Environment') {
-            steps {
-                script {
-                    switch (AWS_DEPLOYMENT_REGION) {
-                        case "us-east-1":
-                            CICD_REGION_ROLE = 'jenkins-pipeline-assume-role'
-                            break
-                        case "eu-west-2":
-                            CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-euw2'
-                            break
-                        case "eu-central-1":
-                            CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-euc1'
-                            break
-                    }
-                    withCredentials([string(credentialsId: CICD_CREDENTIAL, variable: 'CICD_ACCOUNT')]) {
-                        CICD_ACCOUNT_ID = CICD_ACCOUNT
-                    }
+    stage('starting RDS cluster') {
+        steps{
+        script{
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+            
+             if("$rds_cluster"!="none"){
+              switch("$op_rds"){
+                case "Start" :
+                 
+                      try {
+                          db_start = sh(script: "aws rds start-db-cluster --db-cluster-identifier $rds_cluster |  xargs", returnStdout:true).trim()
+                          echo "RDS cluster $rds_cluster will be available "
+                      }
+                      catch(err){
+                          echo "ERROR CAUGHT: $err"
+                      }
+                    
+                 break;
 
-                    withCredentials([string(credentialsId: AWS_CREDENTIAL, variable: 'ACCOUNT_ID')]) {
-                        AWS_ACCOUNT_ID = ACCOUNT_ID
-                    }
-                }
-            }
-        }
-        stage('Start EC2 Instance If Not In Auto Scaling Group') {
-            steps {
-                script {
-                    withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-                        withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                            try {
-                                // Get the instance ID based on tag "EC2_Instance"
-                                def instance_id = sh(
-                                    script: 'aws ec2 describe-instances --filters "Name=tag:Name,Values=EC2_Instance" --query "Reservations[*].Instances[*].InstanceId" --output text',
-                                    returnStdout: true
-                                ).trim()
-                                echo "EC2 instance ID is $instance_id"
+              case "Stop" :
+                try {
+                          db_start = sh(script: "aws rds stop-db-cluster --db-cluster-identifier $rds_cluster |  xargs", returnStdout:true).trim()
+                          echo "RDS cluster $rds_cluster will be stopped "
+                      }
+                      catch(err){
+                          echo "ERROR CAUGHT: $err"
+                      }
+                  break;
+              case "Status" :
+                     try{  db_status = sh(
+                          script: "aws rds describe-db-clusters --db-cluster-identifier $rds_cluster --query DBClusters[0].Status | xargs", returnStdout:true
+                        ).trim()
+                        echo "DB Status: $db_status"
 
-                                // Check if the instance is part of an Auto Scaling Group
-                                def asg_response = sh(
-                                    script: "aws autoscaling describe-auto-scaling-instances --instance-ids ${instance_id} --query AutoScalingInstances[*].AutoScalingGroupName --output text",
-                                    returnStdout: true
-                                ).trim()
-
-                                if (asg_response) {
-                                    // If the instance is associated with an Auto Scaling Group, skip this stage
-                                    echo "Instance ${instance_id} is associated with Auto Scaling Group: ${asg_response}. Skipping the start action."
-                                } else {
-                                    // If the instance is NOT associated with an Auto Scaling Group
-                                    echo "Instance ${instance_id} is not associated with any Auto Scaling Group. Starting the instance..."
-
-                                    // Start the EC2 instance
-                                    def start_response = sh(
-                                        script: "aws ec2 start-instances --instance-ids ${instance_id} --output text",
-                                        returnStdout: true
-                                    ).trim()
-                                    echo "Start response for instance ${instance_id}: ${start_response}"
-
-                                    // Check if the instance becomes 'running'
-                                    def instance_state = ""
-                                    while (instance_state != "running") {
-                                        echo "Waiting for EC2 instance ${instance_id} to be in 'running' state..."
-                                        sleep(30) // Wait for 30 seconds before checking again
-
-                                        instance_state = sh(
-                                            script: "aws ec2 describe-instances --instance-ids ${instance_id} --query Reservations[0].Instances[0].State.Name --output text",
-                                            returnStdout: true
-                                        ).trim()
-
-                                        echo "Current EC2 instance ${instance_id} state: ${instance_state}"
-                                    }
-                                    echo "EC2 instance ${instance_id} is now running."
-                                }
-                            } catch (err) {
-                                echo "ERROR CAUGHT: $err"
-                            }
+                        while(db_status != "available"){
+                          echo "DB Cluster Not Available. Sleeping for 60 seconds..."
+                          sleep(60)
+                          db_status = sh(
+                            script: "aws rds describe-db-clusters --db-cluster-identifier $rds_cluster --query DBClusters[0].Status | xargs", returnStdout:true
+                          ).trim()
+                          echo "DB Status: $db_status"
                         }
-                    }
+                      }
+                    catch(err){
+                        echo "ERROR CAUGHT: $err"
+                      }
+                  break;
+                   default :
+                  echo "NO operation"
+                  break;
                 }
+             }
+             else{
+              echo "No RDS cluster was selected"
+             }
+             
             }
+          }
+          echo "Environment is now up and available. Please confirm applications are running properly"
         }
+      }
     }
-}
