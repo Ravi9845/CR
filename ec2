@@ -61,3 +61,72 @@
         }
       }
     }
+====================================================================================================================================
+    stage('Scale Up ECS Service') {
+      steps{
+        script{
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+              //Get list of ECS Clusters
+              list_clusters_response = sh (
+                script: "aws ecs list-clusters --query clusterArns | xargs", returnStdout: true
+              ).trim()
+              clusters = list_clusters_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+              //Loop though each ECS cluster to get list of Services
+              clusters.each { cluster ->
+                list_services_response = sh (
+                  script: "aws ecs list-services --cluster $cluster --query serviceArns| xargs",returnStdout: true
+                ).trim()
+                echo "$list_services_response"
+                //Puts output in array format
+                services = list_services_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+                //Loops through each service to change the desired service count
+                batch_services = []
+                non_batch_services = []
+                services.each { service ->
+                  if (service.contains("Batch")){
+                    batch_services.add(service)
+                  }
+                  else{
+                    non_batch_services.add(service)
+                  }
+                }
+                batch_services.each {service ->
+                  desired_count = ""
+                  if (service.contains("dm")) {
+                    desired_count = "2"
+                  }
+				          else if (service.contains("perf")) {
+                    desired_count = "5"
+                  }
+                  else {
+                    desired_count = "2"
+                  }
+                  scale_services = sh (
+                    script: "aws ecs update-service --cluster $cluster --service $service --desired-count $desired_count | xargs -0 ", returnStdout: true
+                  ).trim()
+                  echo "60 required wait for Batch"
+                  sleep(60)
+                }
+                non_batch_services.each {service ->
+                  desired_count = ""
+                  if (service.contains("bpo")){
+                    desired_count = "1"
+                  }
+				          else if (service.contains("perf-BlazeRMA")) {
+                    desired_count = "1"
+                  }
+                  else {
+                    desired_count = "2"
+                  }
+                  scale_services = sh (
+                    script: "aws ecs update-service --cluster $cluster --service $service --desired-count $desired_count | xargs -0 ", returnStdout: true
+                  ).trim()
+                }
+              }
+            }
+          }
+          // echo "Environment is now up and available. Please confirm applications are running properly"
+        }
+      }
+    }//ecs ends
