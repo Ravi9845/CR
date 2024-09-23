@@ -1,0 +1,21 @@
+    stage('start EC2 instance'){
+      steps{
+        script{
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+                try{
+                  // to store the instance id
+                  def instance_id=sh(script: 'aws ec2 describe-instances --filters "Name=tag:Name,Values=EC2_Instance" --query "Reservation[*].Instance[*].InstanceId" --output text',returnStdout:true).trim()
+                  echo "Ec2 instance ID is $instance_id "
+                }
+                catch(err){
+                  echo "ERROR CAUGHT: $err"
+                }
+              
+        }
+      }
+    }
+  }
+}
+}
+}
