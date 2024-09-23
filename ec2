@@ -1,56 +1,123 @@
-stage('Start EC2 Instance If Not In Auto Scaling Group') {
-    steps {
-        script {
-            withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-                withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                    try {
-                        // Get the instance ID based on tag "EC2_Instance"
-                        def instance_id = sh(
-                            script: 'aws ec2 describe-instances --filters "Name=tag:Name,Values=EC2_Instance" --query "Reservations[*].Instances[*].InstanceId" --output text',
-                            returnStdout: true
-                        ).trim()
-                        echo "EC2 instance ID is $instance_id"
-                        
-                        // Check if the instance is part of an Auto Scaling Group
-                        def asg_response = sh(
-                            script: "aws autoscaling describe-auto-scaling-instances --instance-ids ${instance_id} --query AutoScalingInstances[*].AutoScalingGroupName --output text",
-                            returnStdout: true
-                        ).trim()
+pipeline {
+  agent {
+		label 'ams'
+	}
+  environment{
+    AWS_DEPLOYMENT_REGION = "$env.AWS_DEPLOYMENT_REGION"
+    STAGE = "$env.STAGE"
+    AWS_CREDENTIAL = "aws_account_id_${STAGE.toLowerCase()}_${AWS_DEPLOYMENT_REGION.replace('-', '_')}"
+		AWS_ACCOUNT_ID = ''
+    AWS_IAM_ROLE_NAME = 'customer-environment-shutdown-startup'
+    CICD_REGION = 'us-east-1'
+    CICD_REGION_ROLE = ''
+		CICD_CREDENTIAL = 'aws_account_id_cicd_us_east_1'
+		CICD_ACCOUNT_ID = '' // Instance="$env.EC2_Instance"
+    EC2_Instance="$env.EC2_Instance"
 
-                        if (asg_response) {
-                            // If the instance is associated with an Auto Scaling Group, skip this stage
-                            echo "Instance ${instance_id} is associated with Auto Scaling Group: ${asg_response}. Skipping the start action."
-                        } else {
-                            // If the instance is NOT associated with an Auto Scaling Group
-                            echo "Instance ${instance_id} is not associated with any Auto Scaling Group. Starting the instance..."
+  }
+  stages {
+    stage('Setup Environment') {
+			steps {
+				script {
+					switch (AWS_DEPLOYMENT_REGION) {
+						case "us-east-1":
+							CICD_REGION_ROLE = 'jenkins-pipeline-assume-role'
+							break
+						case "eu-west-2":
+							CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-euw2'
+							break
+						case "eu-central-1":
+              CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-euc1'
+							break
+					}
+					withCredentials([string(credentialsId: CICD_CREDENTIAL, variable: 'CICD_ACCOUNT')]) {
+						CICD_ACCOUNT_ID = CICD_ACCOUNT
+					}
 
-                            // Start the EC2 instance
-                            def start_response = sh(
-                                script: "aws ec2 start-instances --instance-ids ${instance_id} --output text",
-                                returnStdout: true
-                            ).trim()
-                            echo "Start response for instance ${instance_id}: ${start_response}"
-
-                            // Check if the instance becomes 'running'
-                            def instance_state = ""
-                            while (instance_state != "running") {
-                                echo "Waiting for EC2 instance ${instance_id} to be in 'running' state..."
-                                sleep(30) // Wait for 30 seconds before checking again
-
-                                instance_state = sh(
-                                    script: "aws ec2 describe-instances --instance-ids ${instance_id} --query Reservations[0].Instances[0].State.Name --output text",
-                                    returnStdout: true
-                                ).trim()
-
-                                echo "Current EC2 instance ${instance_id} state: ${instance_state}"
-                            }
-                            echo "EC2 instance ${instance_id} is now running."
-                        }
-                    } catch (err) {
-                        echo "ERROR CAUGHT: $err"
-                    }
-                }
-            }
-        }
+					withCredentials([string(credentialsId: AWS_CREDENTIAL, variable: 'ACCOUNT_ID')]) {
+						AWS_ACCOUNT_ID = ACCOUNT_ID
+					}
+				}
+			}
     }
-}
+  }
+ stage('Start EC2 Instance If Not In Auto Scaling Group') {
+     steps {
+         script {
+             withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+                 withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+                     try {
+                         // Get the instance ID based on tag "EC2_Instance"
+                         def instance_id = sh(
+                             script: 'aws ec2 describe-instances --filters "Name=tag:Name,Values=EC2_Instance" --query "Reservations[*].Instances[*].InstanceId" --output text',
+                             returnStdout: true
+                         ).trim()
+                         echo "EC2 instance ID is $instance_id"
+                         
+                         // Check if the instance is part of an Auto Scaling Group
+                         def asg_response = sh(
+                             script: "aws autoscaling describe-auto-scaling-instances --instance-ids ${instance_id} --query AutoScalingInstances[*].AutoScalingGroupName --output text",
+                             returnStdout: true
+                         ).trim()
+ 
+                         if (asg_response) {
+                             // If the instance is associated with an Auto Scaling Group, skip this stage
+                             echo "Instance ${instance_id} is associated with Auto Scaling Group: ${asg_response}. Skipping the start action."
+                         } else {
+                             // If the instance is NOT associated with an Auto Scaling Group
+                             echo "Instance ${instance_id} is not associated with any Auto Scaling Group. Starting the instance..."
+ 
+                             // Start the EC2 instance
+                             def start_response = sh(
+                                 script: "aws ec2 start-instances --instance-ids ${instance_id} --output text",
+                                 returnStdout: true
+                             ).trim()
+                             echo "Start response for instance ${instance_id}: ${start_response}"
+ 
+                             // Check if the instance becomes 'running'
+                             def instance_state = ""
+                             while (instance_state != "running") {
+                                 echo "Waiting for EC2 instance ${instance_id} to be in 'running' state..."
+                                 sleep(30) // Wait for 30 seconds before checking again
+ 
+                                 instance_state = sh(
+                                     script: "aws ec2 describe-instances --instance-ids ${instance_id} --query Reservations[0].Instances[0].State.Name --output text",
+                                     returnStdout: true
+                                 ).trim()
+ 
+                                 echo "Current EC2 instance ${instance_id} state: ${instance_state}"
+                             }
+                             echo "EC2 instance ${instance_id} is now running."
+                         }
+                     } catch (err) {
+                         echo "ERROR CAUGHT: $err"
+                     }
+                 }
+             }
+         }
+     }
+   }
+ }
+WorkflowScript: 44: Undefined section "stage" @ line 44, column 2.
+    stage('Start EC2 Instance If Not In Auto Scaling Group') {
+    ^
+
+1 error
+
+	at org.codehaus.groovy.control.ErrorCollector.failIfErrors(ErrorCollector.java:309)
+	at org.codehaus.groovy.control.CompilationUnit.applyToPrimaryClassNodes(CompilationUnit.java:1107)
+	at org.codehaus.groovy.control.CompilationUnit.doPhaseOperation(CompilationUnit.java:624)
+	at org.codehaus.groovy.control.CompilationUnit.processPhaseOperations(CompilationUnit.java:602)
+	at org.codehaus.groovy.control.CompilationUnit.compile(CompilationUnit.java:579)
+	at groovy.lang.GroovyClassLoader.doParseClass(GroovyClassLoader.java:323)
+	at groovy.lang.GroovyClassLoader.parseClass(GroovyClassLoader.java:293)
+	at groovy.lang.GroovyShell.parseClass(GroovyShell.java:677)
+	at groovy.lang.GroovyShell.parse(GroovyShell.java:689)
+	at org.jenkinsci.plugins.workflow.cps.CpsGroovyShell.doParse(CpsGroovyShell.java:142)
+	at org.jenkinsci.plugins.workflow.cps.CpsGroovyShell.reparse(CpsGroovyShell.java:127)
+	at org.jenkinsci.plugins.workflow.cps.CpsFlowExecution.parseScript(CpsFlowExecution.java:571)
+	at org.jenkinsci.plugins.workflow.cps.CpsFlowExecution.start(CpsFlowExecution.java:523)
+	at org.jenkinsci.plugins.workflow.job.WorkflowRun.run(WorkflowRun.java:335)
+	at hudson.model.ResourceController.execute(ResourceController.java:100)
+	at hudson.model.Executor.run(Executor.java:440)
+Finished: FAILURE
