@@ -1,0 +1,93 @@
+pipeline {
+  agent any
+  parameters {
+    string(name: 'ACTION', defaultValue: 'start', description: 'Action to perform: start or stop')
+    string(name: 'CLUSTER_NAME', defaultValue: 'your-cluster-name', description: 'The name of the ECS cluster')
+  }
+  stages {
+    stage('Scale ECS Services Based on Cluster') {
+      steps {
+        script {
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+
+              def action = params.ACTION.toLowerCase()
+              def cluster = params.CLUSTER_NAME // Use the cluster name passed as a parameter
+
+              if (action != 'start' && action != 'stop') {
+                error('Invalid action provided. Please specify "start" or "stop".')
+              }
+
+              // Get the list of services in the specified ECS cluster
+              def list_services_response = sh (
+                script: "aws ecs list-services --cluster $cluster --query serviceArns | xargs",
+                returnStdout: true
+              ).trim()
+
+              echo "Services in cluster $cluster: $list_services_response"
+
+              // Put output into an array format
+              def services = list_services_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+
+              // Define desired counts based on cluster name and action (start or stop)
+              services.each { service ->
+
+                def desired_count = ""
+
+                if (action == 'start') {
+                  // Set scaling values based on specific clusters
+                  
+                  if (cluster.contains("prod-cluster")) {
+                    // For production clusters, scale up
+                    if (service.contains("web")) {
+                      desired_count = "5"
+                    } else if (service.contains("db")) {
+                      desired_count = "3"
+                    } else {
+                      desired_count = "2"
+                    }
+                  } 
+                  else if (cluster.contains("staging-cluster")) {
+                    // For staging clusters, scale based on service name
+                    if (service.contains("api")) {
+                      desired_count = "3"
+                    } else if (service.contains("auth")) {
+                      desired_count = "2"
+                    } else {
+                      desired_count = "2"
+                    }
+                  } 
+                  else if (cluster.contains("dev-cluster")) {
+                    // For development clusters, minimal scaling based on service name
+                    if (service.contains("test")) {
+                      desired_count = "1"
+                    } else if (service.contains("debug")) {
+                      desired_count = "1"
+                    } else {
+                      desired_count = "1"
+                    }
+                  } 
+                  else {
+                    // Default scaling for other clusters
+                    desired_count = "2"
+                  }
+                } else if (action == 'stop') {
+                  // When stopping, set all desired counts to 0
+                  desired_count = "0"
+                }
+
+                // Update the service with the desired count
+                def scale_services = sh (
+                  script: "aws ecs update-service --cluster $cluster --service $service --desired-count $desired_count | xargs -0",
+                  returnStdout: true
+                ).trim()
+
+                echo "Scaled service $service in cluster $cluster to desired count $desired_count"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
