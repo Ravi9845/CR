@@ -38,12 +38,14 @@ stage('Scale ECS Services Based on Cluster') {
 
                     // Check the operation type (start or stop)
                     def operationType = op_ecs // This should be passed as a parameter
+                    echo "Operation Type: ${operationType}" // Debugging output
 
                     // Iterate over the services in the desired_counts map and update their desired count
                     desired_counts.each { service, count ->
+                        // Determine the desired count based on operation type
+                        def desired_count = operationType == 'start' ? count : "0" // Use the desired count when starting, or set to zero when stopping
 
-                        // Set the desired count based on operation type
-                        def desired_count = operationType == 'start' ? count : "0" // Set to zero when stopping
+                        echo "Scaling service ${service} to desired count: ${desired_count}" // Debugging output
 
                         // Execute the scaling command
                         def scale_service = sh (
@@ -58,31 +60,3 @@ stage('Scale ECS Services Based on Cluster') {
         }
     }
 }
-+ aws ecs update-service --cluster test-cluster --service test01 --desired-count 0
-[Pipeline] echo
-Scaled service test01 in cluster test-cluster to desired count 0
-[Pipeline] sh
-+ aws ecs update-service --cluster test-cluster --service db-01 --desired-count 0
-[Pipeline] echo
-Scaled service db-01 in cluster test-cluster to desired count 0
-[Pipeline] sh
-+ aws ecs update-service --cluster test-cluster --service rt --desired-count 0
-
-An error occurred (ServiceNotFoundException) when calling the UpdateService operation: 
-[Pipeline] }
-[Pipeline] // withAWS
-[Pipeline] }
-[Pipeline] // withAWS
-[Pipeline] }
-[Pipeline] // script
-[Pipeline] }
-[Pipeline] // stage
-[Pipeline] }
-[Pipeline] // withEnv
-[Pipeline] }
-[Pipeline] // withEnv
-[Pipeline] }
-[Pipeline] // node
-[Pipeline] End of Pipeline
-ERROR: script returned exit code 254
-Finished: FAILURE
