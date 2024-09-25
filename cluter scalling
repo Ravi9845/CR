@@ -1,53 +1,60 @@
-pipeline {
-  agent any
-  parameters {
-    string(name: 'ACTION', defaultValue: 'start', description: 'Action to perform: start or stop')
-    string(name: 'CLUSTER_NAME', defaultValue: 'your-cluster-name', description: 'The name of the ECS cluster')
+    pipeline {
+  agent {
+		label 'ams'
+	}
+  environment{
+    // AWS_DEPLOYMENT_REGION = "$env.AWS_DEPLOYMENT_REGION"
+    AWS_DEPLOYMENT_REGION = "aaaaaa"
+    // STAGE = "$env.STAGE"
+    STAGE = "DEV"
+    AWS_CREDENTIAL = "aws_account_id_${STAGE.toLowerCase()}_${AWS_DEPLOYMENT_REGION.replace('-', '_')}"
+		AWS_ACCOUNT_ID = ''
+    AWS_IAM_ROLE_NAME = 'xxxxx'
+    CICD_REGION = 'xxxxx'
+    CICD_REGION_ROLE = ''
+		CICD_CREDENTIAL = 'aws_account_id_cicd_us_east_1'
+		CICD_ACCOUNT_ID = '' // Instance="$env.EC2_Instance"
+    def ecs_cluster ="$env.ECS_cluster"
+    def op_ecs="$env.ECS_operations"
+    
   }
-  stages {
-    stage('Scale ECS Services Based on Cluster') {
+stages {
+stage('Scale ECS Services Based on Cluster') {
       steps {
         script {
           withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
             withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
 
-              def action = params.ACTION.toLowerCase()
-              def cluster = params.CLUSTER_NAME // Use the cluster name passed as a parameter
-
-              if (action != 'start' && action != 'stop') {
-                error('Invalid action provided. Please specify "start" or "stop".')
-              }
-
-              // Get the list of services in the specified ECS cluster
-              def list_services_response = sh (
-                script: "aws ecs list-services --cluster $cluster --query serviceArns | xargs",
+            // Get the list of services in the specified ECS cluster
+              def list_services = sh (
+                script: "aws ecs list-services --cluster $ecs_cluster --query service | xargs",
                 returnStdout: true
               ).trim()
 
-              echo "Services in cluster $cluster: $list_services_response"
+              echo "Services in cluster $ecs_cluster: $list_services_response"
 
               // Put output into an array format
-              def services = list_services_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+              // def services = list_services_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
 
               // Define desired counts based on cluster name and action (start or stop)
-              services.each { service ->
+              list_services.each { service ->
 
                 def desired_count = ""
 
-                if (action == 'start') {
+                if (op_ecs == 'start') {
                   // Set scaling values based on specific clusters
                   
-                  if (cluster.contains("prod-cluster")) {
+                  if (ecs_cluster.contains("test-cluster")) {
                     // For production clusters, scale up
-                    if (service.contains("web")) {
-                      desired_count = "5"
-                    } else if (service.contains("db")) {
-                      desired_count = "3"
-                    } else {
+                    if (service.contains("test")) {
                       desired_count = "2"
+                    } else if (service.contains("db")) {
+                      desired_count = "1"
+                    } else {
+                      desired_count = "1"
                     }
                   } 
-                  else if (cluster.contains("staging-cluster")) {
+                  else if (ecs_cluster.contains("staging-cluster")) {
                     // For staging clusters, scale based on service name
                     if (service.contains("api")) {
                       desired_count = "3"
@@ -88,6 +95,55 @@ pipeline {
           }
         }
       }
-    }
+     }
   }
-}
+ }
+hudson.remoting.ProxyException: groovy.lang.MissingPropertyException: No such property: list_services_response for class: WorkflowScript
+	at org.codehaus.groovy.runtime.ScriptBytecodeAdapter.unwrap(ScriptBytecodeAdapter.java:66)
+	at org.codehaus.groovy.runtime.ScriptBytecodeAdapter.getProperty(ScriptBytecodeAdapter.java:471)
+	at org.kohsuke.groovy.sandbox.impl.Checker$7.call(Checker.java:355)
+	at org.kohsuke.groovy.sandbox.GroovyInterceptor.onGetProperty(GroovyInterceptor.java:68)
+	at org.jenkinsci.plugins.scriptsecurity.sandbox.groovy.SandboxInterceptor.onGetProperty(SandboxInterceptor.java:355)
+	at org.kohsuke.groovy.sandbox.impl.Checker$7.call(Checker.java:353)
+	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:357)
+	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
+	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
+	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
+	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
+	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
+	at com.cloudbees.groovy.cps.sandbox.SandboxInvoker.getProperty(SandboxInvoker.java:29)
+	at com.cloudbees.groovy.cps.impl.PropertyAccessBlock.rawGet(PropertyAccessBlock.java:20)
+	at WorkflowScript.run(WorkflowScript:310)
+	at ___cps.transform___(Native Method)
+	at com.cloudbees.groovy.cps.impl.PropertyishBlock$ContinuationImpl.get(PropertyishBlock.java:74)
+	at com.cloudbees.groovy.cps.LValueBlock$GetAdapter.receive(LValueBlock.java:30)
+	at com.cloudbees.groovy.cps.impl.PropertyishBlock$ContinuationImpl.fixName(PropertyishBlock.java:66)
+	at jdk.internal.reflect.GeneratedMethodAccessor719.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at com.cloudbees.groovy.cps.impl.ContinuationPtr$ContinuationImpl.receive(ContinuationPtr.java:72)
+	at com.cloudbees.groovy.cps.impl.ConstantBlock.eval(ConstantBlock.java:21)
+	at com.cloudbees.groovy.cps.Next.step(Next.java:83)
+	at com.cloudbees.groovy.cps.Continuable$1.call(Continuable.java:174)
+	at com.cloudbees.groovy.cps.Continuable$1.call(Continuable.java:163)
+	at org.codehaus.groovy.runtime.GroovyCategorySupport$ThreadCategoryInfo.use(GroovyCategorySupport.java:136)
+	at org.codehaus.groovy.runtime.GroovyCategorySupport.use(GroovyCategorySupport.java:275)
+	at com.cloudbees.groovy.cps.Continuable.run0(Continuable.java:163)
+	at org.jenkinsci.plugins.workflow.cps.SandboxContinuable.access$001(SandboxContinuable.java:18)
+	at org.jenkinsci.plugins.workflow.cps.SandboxContinuable.run0(SandboxContinuable.java:51)
+	at org.jenkinsci.plugins.workflow.cps.CpsThread.runNextChunk(CpsThread.java:185)
+	at org.jenkinsci.plugins.workflow.cps.CpsThreadGroup.run(CpsThreadGroup.java:403)
+	at org.jenkinsci.plugins.workflow.cps.CpsThreadGroup.access$400(CpsThreadGroup.java:97)
+	at org.jenkinsci.plugins.workflow.cps.CpsThreadGroup$2.call(CpsThreadGroup.java:315)
+	at org.jenkinsci.plugins.workflow.cps.CpsThreadGroup$2.call(CpsThreadGroup.java:279)
+	at org.jenkinsci.plugins.workflow.cps.CpsVmExecutorService$2.call(CpsVmExecutorService.java:67)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at hudson.remoting.SingleLaneExecutorService$1.run(SingleLaneExecutorService.java:139)
+	at jenkins.util.ContextResettingExecutorService$1.run(ContextResettingExecutorService.java:28)
+	at jenkins.security.ImpersonatingExecutorService$1.run(ImpersonatingExecutorService.java:68)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+	at java.base/java.lang.Thread.run(Thread.java:829)
+Finished: FAILURE
