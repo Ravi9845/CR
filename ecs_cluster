@@ -58,3 +58,31 @@ stage('Scale ECS Services Based on Cluster') {
         }
     }
 }
++ aws ecs update-service --cluster test-cluster --service test01 --desired-count 0
+[Pipeline] echo
+Scaled service test01 in cluster test-cluster to desired count 0
+[Pipeline] sh
++ aws ecs update-service --cluster test-cluster --service db-01 --desired-count 0
+[Pipeline] echo
+Scaled service db-01 in cluster test-cluster to desired count 0
+[Pipeline] sh
++ aws ecs update-service --cluster test-cluster --service rt --desired-count 0
+
+An error occurred (ServiceNotFoundException) when calling the UpdateService operation: 
+[Pipeline] }
+[Pipeline] // withAWS
+[Pipeline] }
+[Pipeline] // withAWS
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+ERROR: script returned exit code 254
+Finished: FAILURE
