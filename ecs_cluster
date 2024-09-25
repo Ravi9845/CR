@@ -64,3 +64,31 @@ stages {
 
                                 echo "Scaled service $service in cluster $ecs_cluster to desired count $desired_count"
                             }
++ aws ecs update-service --cluster test-cluster --service arn:aws:ecs:us-east-1:123236923710:service/test-cluster/test01 --desired-count
+
+usage: aws [options] <command> <subcommand> [<subcommand> ...] [parameters]
+To see help text, you can run:
+
+  aws help
+  aws <command> help
+  aws <command> <subcommand> help
+
+aws: error: argument --desired-count: expected one argument
+
+[Pipeline] }
+[Pipeline] // withAWS
+[Pipeline] }
+[Pipeline] // withAWS
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+ERROR: script returned exit code 252
+Finished: FAILURE
