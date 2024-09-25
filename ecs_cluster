@@ -60,3 +60,16 @@ stage('Scale ECS Services Based on Cluster') {
         }
     }
 }
+Operation Type: Start
+[Pipeline] echo
+Scaling service test01 to desired count: 0
+[Pipeline] sh
++ aws ecs update-service --cluster test-cluster --service test01 --desired-count 0
+[Pipeline] echo
+Scaled service test01 in cluster test-cluster to desired count 0
+[Pipeline] echo
+Scaling service db-01 to desired count: 0
+[Pipeline] sh
++ aws ecs update-service --cluster test-cluster --service db-01 --desired-count 0
+[Pipeline] echo
+Scaled service db-01 in cluster test-cluster to desired count 0
