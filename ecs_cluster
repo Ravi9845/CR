@@ -37,13 +37,13 @@ stage('Scale ECS Services Based on Cluster') {
                     }
 
                     // Check the operation type (start or stop)
-                    def operationType = op_ecs // This should be passed as a parameter
+                    def operationType = op_ecs.toLowerCase() // Convert to lowercase for consistent comparison
                     echo "Operation Type: ${operationType}" // Debugging output
 
                     // Iterate over the services in the desired_counts map and update their desired count
                     desired_counts.each { service, count ->
                         // Determine the desired count based on operation type
-                        def desired_count = operationType == 'start' ? count : "0" // Use the desired count when starting, or set to zero when stopping
+                        def desired_count = (operationType == 'start') ? count : "0" // Use the desired count when starting, or set to zero when stopping
 
                         echo "Scaling service ${service} to desired count: ${desired_count}" // Debugging output
 
