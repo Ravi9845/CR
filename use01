@@ -1,4 +1,0 @@
-                   InstanceId = sh(script:'aws ec2 describe-instances --filters Name=tag:Name,Values=$EC2_Instance --query "Reservations[*].Instances[*].InstanceId" --output text', returnStdout:true).trim()
-                  def lines = InstanceId.readLines()
-                    InstanceId_asg  =lines[0].trim()
-                  echo "$EC2_Instance ID is $InstanceId"

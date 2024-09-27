@@ -1,0 +1,371 @@
+pipeline {
+  agent {
+		label 'ams'
+	}
+  environment{
+    // AWS_DEPLOYMENT_REGION = "$env.AWS_DEPLOYMENT_REGION"
+    AWS_DEPLOYMENT_REGION = "us-east-1"
+    // STAGE = "$env.STAGE"
+    STAGE = "DEV"
+    AWS_CREDENTIAL = "aws_account_id_${STAGE.toLowerCase()}_${AWS_DEPLOYMENT_REGION.replace('-', '_')}"
+		AWS_ACCOUNT_ID = ''
+    AWS_IAM_ROLE_NAME = 'customer-environment-shutdown-startup'
+    CICD_REGION = 'us-east-1'
+    CICD_REGION_ROLE = ''
+		CICD_CREDENTIAL = 'aws_account_id_cicd_us_east_1'
+		CICD_ACCOUNT_ID = '' // Instance="$env.EC2_Instance"
+    EC2_Instance="$env.EC2_Instance"
+    def InstanceId=" "
+    def InstanceId_asg=" "
+    def instance_status=" "
+    def asg_name = " "
+    def op = "$env.EC2_operations"
+    def op_rds="$env.RDS_operations"
+    def rds_flag= "$env.rdsFlag"
+    def rds_cluster ="$env.RDS_cluster"
+    def ecs_cluster ="$env.ECS_cluster"
+    def op_ecs="$env.ECS_operations"
+    
+  }
+  stages {
+    stage('Setup Environment') {
+			steps {
+				script {
+					switch (AWS_DEPLOYMENT_REGION) {
+						case "us-east-1":
+							CICD_REGION_ROLE = 'jenkins-pipeline-assume-role'
+							break
+						case "eu-west-2":
+							CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-euw2'
+							break
+						case "eu-central-1":
+              CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-euc1'
+							break
+					}
+					withCredentials([string(credentialsId: CICD_CREDENTIAL, variable: 'CICD_ACCOUNT')]) {
+						CICD_ACCOUNT_ID = CICD_ACCOUNT
+					}
+
+					withCredentials([string(credentialsId: AWS_CREDENTIAL, variable: 'ACCOUNT_ID')]) {
+						AWS_ACCOUNT_ID = ACCOUNT_ID
+					}
+				}
+			}
+    }
+    stage('start EC2 instance'){
+      steps{
+        script{
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+                try{
+                  // to store the instance id
+                   InstanceId = sh(script:'aws ec2 describe-instances --filters Name=tag:Name,Values=$EC2_Instance --query "Reservations[*].Instances[*].InstanceId" --output text', returnStdout:true).trim()
+                  def lines = InstanceId.readLines()
+                    InstanceId_asg  =lines[0].trim()
+                  echo "$EC2_Instance ID is $InstanceId"
+
+                  // get instance status
+                   instance_status = sh(script:'aws ec2 describe-instances --filters "Name=tag:Name,Values=$EC2_Instance" "Name=instance-state-name,Values=running,stopped" | jq \'.Reservations[0].Instances[0].State.Name\' | tr -d \'"\'' , returnStdout:true).trim()    
+                     
+                  switch ("$op"){
+
+                    case "Start":
+                          if ("$instance_status"=="stopped"){
+                            start_instances = sh(script: "aws ec2 start-instances --instance-ids $InstanceId", returnStdout:true).trim()
+                            echo "Instance $InstanceId is now started"
+                          }
+                          else if ("$instance_status"=="running"){
+                              echo "Instance $InstanceId is already running"
+                          }
+                          else{
+                            echo "ERROR"
+                          }
+                    break;
+
+                    case "Stop":
+                          if ("$instance_status"=="stopped"){
+                            echo "Instance $InstanceId is already in stop state"
+                          }
+                          else if ("$instance_status"=="running"){
+                            stop_instances = sh(script: "aws ec2 stop-instances --instance-ids $InstanceId", returnStdout:true).trim()
+                            echo "Stopped - $InstanceId"
+                          }
+                    break;
+
+                    case "Status":
+                          echo "EC2 status - $instance_status" 
+                    break;
+                  }
+                }
+                catch(err){
+                  echo "ERROR CAUGHT: $err"
+                }           
+            }
+          }
+        }
+      }
+    }// ec2 stage ends
+    // stage('Scale Up ECS Service') {
+    //   steps{
+    //     script{
+    //       withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+    //         withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+    //           //Get list of ECS Clusters
+    //           list_clusters_response = sh (
+    //             script: "aws ecs list-clusters --query clusterArns | xargs", returnStdout: true
+    //           ).trim()
+    //           clusters = list_clusters_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+    //           //Loop though each ECS cluster to get list of Services
+    //           clusters.each { cluster ->
+    //             list_services_response = sh (
+    //               script: "aws ecs list-services --cluster $cluster --query serviceArns| xargs",returnStdout: true
+    //             ).trim()
+    //             echo "$list_services_response"
+    //             //Puts output in array format
+    //             services = list_services_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
+    //             //Loops through each service to change the desired service count
+    //             batch_services = []
+    //             non_batch_services = []
+    //             services.each { service ->
+    //               if (service.contains("Batch")){
+    //                 batch_services.add(service)
+    //               }
+    //               else{
+    //                 non_batch_services.add(service)
+    //               }
+    //             }
+    //             batch_services.each {service ->
+    //               desired_count = ""
+    //               if (service.contains("dm")) {
+    //                 desired_count = "2"
+    //               }
+		// 		          else if (service.contains("perf")) {
+    //                 desired_count = "5"
+    //               }
+    //               else {
+    //                 desired_count = "2"
+    //               }
+    //               scale_services = sh (
+    //                 script: "aws ecs update-service --cluster $cluster --service $service --desired-count $desired_count | xargs -0 ", returnStdout: true
+    //               ).trim()
+    //               echo "60 required wait for Batch"
+    //               sleep(60)
+    //             }
+    //             non_batch_services.each {service ->
+    //               desired_count = ""
+    //               if (service.contains("bpo")){
+    //                 desired_count = "1"
+    //               }
+		// 		          else if (service.contains("perf-BlazeRMA")) {
+    //                 desired_count = "1"
+    //               }
+    //               else {
+    //                 desired_count = "2"
+    //               }
+    //               scale_services = sh (
+    //                 script: "aws ecs update-service --cluster $cluster --service $service --desired-count $desired_count | xargs -0 ", returnStdout: true
+    //               ).trim()
+    //             }
+    //           }
+    //         }
+    //       }
+    //       // echo "Environment is now up and available. Please confirm applications are running properly"
+    //     }
+    //   }
+    // }//ecs ends
+
+    stage('Scale Up ASG') {
+      steps{
+        script{
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+              try{
+                asg_name = sh(script:"aws autoscaling describe-auto-scaling-instances --instance-ids $InstanceId_asg --output text --query 'AutoScalingInstances[*].AutoScalingGroupName'", returnStdout:true).trim()
+                echo "$asg_name"
+                def desired_cap=0
+                def asg_map = [
+                                  "dm-ec2-pgadmin":1,
+                                  "eks-dm-smarts-nodegroup-7ec6d95c-5130-a49a-a76b-2e4a97ed49c0":1,
+                                  "dm2-ec2-ecs": 4,
+                                  "crfs-dev-novus-ecs-asg": 2, 
+                                  "stack-p5prndih0fs7wi3ln-DMRuleServerUtilASG-OPY7o7wqIiyz": 1,
+                                  "stack-klhgdwqnnyuvw0gyw-ASG-ZV6EA0iwWuiG": 1, 
+                                  "stack-ecaljj2u0xznpbghu-DMRuleServerUtilASG-B6MK7y5kLk5y": 1, 
+                                  "ActiveMQ": 1, 
+                                  "Fileserver-ASG-testasg-deletelater": 1, 
+                                  "test-active-mq-george-cf-AutoScalingGroup-JqT0FkSF7ZeL": 1, 
+                                  "dm-ec2-openoffice": 1, 
+                                  "stack-tktb6ujjfemhzkjl3-ASG-PJANNCCG5PU7": 1,
+                                  "dm-ec2-etl": 2
+                                ]
+                switch("$op"){
+                  
+                  case "Start" :
+                          if (asg_name.isEmpty()) {
+                          echo "No auto-scaling group exists for $EC2_Instance"
+                        }
+                        else{
+
+                          desired_cap = asg_map["$asg_name"]
+                          echo "Auto scaling group exists for $EC2_Instance desired cap is $desired_cap"
+                          update_desired_cap = sh(script:"aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity $desired_cap", returnStdout:true).trim()
+                        }
+                    break;
+                  
+                  case "Stop" :
+                    update_desired_cap = sh(script:"aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity $desired_cap", returnStdout:true).trim()
+                    break;
+                  default :
+                  echo "NO operation"
+                  break;
+
+                }
+                
+                
+              } 
+              catch(err){
+                  echo "ERROR CAUGHT: $err"
+              } 
+            }
+          }
+          
+        }
+      }
+    }//ecs stage
+    stage('starting RDS cluster') {
+        steps{
+        script{
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+            
+             if("$rds_cluster"!="none"){
+              switch("$op_rds"){
+                case "Start" :
+                 
+                      try {
+                          db_start = sh(script: "aws rds start-db-cluster --db-cluster-identifier $rds_cluster |  xargs", returnStdout:true).trim()
+                          echo "RDS cluster $rds_cluster will be available "
+                      }
+                      catch(err){
+                          echo "ERROR CAUGHT: $err"
+                      }
+                    
+                 break;
+
+              case "Stop" :
+                try {
+                          db_start = sh(script: "aws rds stop-db-cluster --db-cluster-identifier $rds_cluster |  xargs", returnStdout:true).trim()
+                          echo "RDS cluster $rds_cluster will be stopped "
+                      }
+                      catch(err){
+                          echo "ERROR CAUGHT: $err"
+                      }
+                  break;
+              case "Status" :
+                     try{  db_status = sh(
+                          script: "aws rds describe-db-clusters --db-cluster-identifier $rds_cluster --query DBClusters[0].Status | xargs", returnStdout:true
+                        ).trim()
+                        echo "DB Status: $db_status"
+
+                        while(db_status != "available"){
+                          echo "DB Cluster Not Available. Sleeping for 60 seconds..."
+                          sleep(60)
+                          db_status = sh(
+                            script: "aws rds describe-db-clusters --db-cluster-identifier $rds_cluster --query DBClusters[0].Status | xargs", returnStdout:true
+                          ).trim()
+                          echo "DB Status: $db_status"
+                        }
+                      }
+                    catch(err){
+                        echo "ERROR CAUGHT: $err"
+                      }
+                  break;
+                   default :
+                  echo "NO operation"
+                  break;
+                }
+             }
+             else{
+              echo "No RDS cluster was selected"
+             }
+             
+            }
+          }
+          echo "Environment is now up and available. Please confirm applications are running properly"
+        }
+      }
+    }
+
+stage('Scale ECS Services Based on Cluster') {
+    steps {
+        script {
+            withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+                withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+                    
+                    // Define the desired counts for services based on cluster
+                    def desired_counts = [:]
+                    if (ecs_cluster == "callout-crfs") {
+                        desired_counts = [
+                            "callout-appservice": "2"
+                        ]
+                    } else if (ecs_cluster == "dm-ecs-cluster") {
+                        desired_counts = [
+                            "dm-BlazeRMA": "1",
+                            "dm-FileProcessor": "1",
+                            "dm-nginx": "2",
+                            "dm-nginx-ec2": "2",
+                            "dm-RestAPI": "2"
+                        ]
+                    } else if (ecs_cluster == "dm2-ecs-cluster") {
+                        desired_counts = [
+                            "dm2-Batch": "2",
+                            "dm2-BlazeRMA": "1",
+                            "dm2-FileProcessor": "1",
+                            "dm2-RestAPI": "2"
+                        ]
+                    } else if (ecs_cluster == "crfs-dev-novus-ecs") {
+                        desired_counts = [
+                            "crfs-configuration": "2",
+                            "crfs-file-processing": "2",
+                            "crfs-security": "2"
+                        ]
+                    } else if (ecs_cluster == "dm-tenant-admin-cluster") {
+                        desired_counts = [
+                            "dm-tenant-admin": "2",
+                            "dm2-tenant-admin": "2"
+                        ]
+                    } else if (ecs_cluster == "dev-cnrportal") {
+                        desired_counts = [
+                            "test-GXC-V2-Service-IGw44VECR17L": "2"
+                        ]
+                    } else if (ecs_cluster == "cos-ecs-cluster") {
+                        desired_counts = [
+                            "cos-app-service": "2",
+                        ]
+                    }                
+                    // Check the operation type (start or stop)
+                    def operationType = op_ecs// This should be passed as a parameter
+                    echo "Operation Type: ${operationType}" // Debugging output
+
+                    // Iterate over the services in the desired_counts map and update their desired count
+                    desired_counts.each { service, count ->
+                        // Determine the desired count based on operation type
+                        def desired_count = operationType == 'start' ? count : "0" // Use the desired count when starting, or set to zero when stopping
+
+                        echo "Scaling service ${service} to desired count: ${desired_count}" // Debugging output
+
+                        // Execute the scaling command
+                        def scale_service = sh (
+                            script: "aws ecs update-service --cluster $ecs_cluster --service $service --desired-count $desired_count",
+                            returnStdout: true
+                        ).trim()
+
+                        echo "Scaled service $service in cluster $ecs_cluster to desired count $desired_count"
+                    }
+                }
+            }
+          }
+        } 
+     }
+  }
+}
