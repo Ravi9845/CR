@@ -1,40 +1,63 @@
-stage('Scale EKS Node Group') {
-    steps {
-        script {
-            withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-                withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+ stage('starting RDS cluster') {
+        steps{
+        script{
+          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+            
+             if("$rds_cluster"!="none"){
+              switch("$op_rds"){
+                case "Start" :
+                 
+                      try {
+                          db_start = sh(script: "aws rds start-db-cluster --db-cluster-identifier $rds_cluster |  xargs", returnStdout:true).trim()
+                          echo "RDS cluster $rds_cluster will be available "
+                      }
+                      catch(err){
+                          echo "ERROR CAUGHT: $err"
+                      }
                     
-                    // Define the desired capacities for the two node groups
-                    def desired_capacities = [
-                        "nodegroupA": "3",  // Desired capacity for node group A
-                        "nodegroupB": "2"   // Desired capacity for node group B
-                    ]
+                 break;
 
-                    // Check the operation type (start or stop)
-                    def operationType = op_eks.toLowerCase() // Convert to lowercase for consistent comparison
-                    echo "Operation Type: ${operationType}"
-
-                    // Get the desired capacity for the selected node group
-                    def selected_capacity = desired_capacities[eks_nodegroup]
-
-                    if (selected_capacity != null) {
-                        // Determine the desired capacity based on operation type
-                        def desired_capacity = (operationType == 'start') ? selected_capacity : "0" // Use the desired capacity when starting, or set to zero when stopping
-
-                        echo "Scaling node group ${eks_nodegroup} to desired capacity: ${desired_capacity}"
-
-                        // Execute the scaling command
-                        def scale_nodegroup = sh (
-                            script: "aws eks update-nodegroup-config --cluster-name $eks_cluster --nodegroup-name $eks_nodegroup --scaling-config minSize=$desired_capacity,maxSize=$desired_capacity,desiredSize=$desired_capacity",
-                            returnStdout: true
+              case "Stop" :
+                try {
+                          db_start = sh(script: "aws rds stop-db-cluster --db-cluster-identifier $rds_cluster |  xargs", returnStdout:true).trim()
+                          echo "RDS cluster $rds_cluster will be stopped "
+                      }
+                      catch(err){
+                          echo "ERROR CAUGHT: $err"
+                      }
+                  break;
+              case "Status" :
+                     try{  db_status = sh(
+                          script: "aws rds describe-db-clusters --db-cluster-identifier $rds_cluster --query DBClusters[0].Status | xargs", returnStdout:true
                         ).trim()
+                        echo "DB Status: $db_status"
 
-                        echo "Scaled node group $eks_nodegroup to desired capacity $desired_capacity"
-                    } else {
-                        echo "Node group ${eks_nodegroup} not found"
-                    }
+                        while(db_status != "available"){
+                          echo "DB Cluster Not Available. Sleeping for 60 seconds..."
+                          sleep(60)
+                          db_status = sh(
+                            script: "aws rds describe-db-clusters --db-cluster-identifier $rds_cluster --query DBClusters[0].Status | xargs", returnStdout:true
+                          ).trim()
+                          echo "DB Status: $db_status"
+                        }
+                      }
+                    catch(err){
+                        echo "ERROR CAUGHT: $err"
+                      }
+                  break;
+                   default :
+                  echo "NO operation"
+                  break;
                 }
+             }
+             else{
+              echo "No RDS cluster was selected"
+             }
+             
             }
+          }
+          echo "Environment is now up and available. Please confirm applications are running properly"
         }
+      }
     }
-}
