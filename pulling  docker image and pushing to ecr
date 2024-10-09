@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# Push SMARTS Images to DMDEV ECR Repo
+dockerCreds=ebc-docker-login 
+ecrRepository=12345678.dkr.ecr.us-east-1.amazonaws.com
+repoName=${ecrRepository}/dm-smarts
+imageTag=${Tag}-${OS}
+echo "Image tag - ${imageTag}"
+
+# smarts or smartsd directory 
+dir=none
+if [[ "${OS}" == "abc" ]]; then
+   dir=smartsd
+elif [[ "${OS}" == "ubuntu" ]]; then
+   dir=smarts
+fi
+
+echo "directory - ${dir}"
+
+# Pulling the Docker Image
+dockerUsername=$(echo ${dockerCreds} | docker login --username _ --password-stdin https://docker.io)
+docker pull sparklinglogic/${dir}:${imageTag}
+docker tag docker.io/sparklinglogic/${dir}:${imageTag} 12345678.dkr.ecr.us-east-1.amazonaws.com/dm-smarts:${imageTag}
+
+# Push to ECR
+aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin $ecrRepository
+
+echo "----> Using Tag Version: $imageTag <----"
+
+function pushImage {
+  echo "----> Pushing $1:$2 <----"
+  if ! docker push "$1":"$2"; then
+   echo "Unable to push $1:$2 to $ecrRepository"
+   exit 1
+  fi
+
+  imageID=$(docker image inspect "$1":"$2" | yaml-get -p Id | cut -d':' -f2)
+  echo "Delete image ${imageID}"
+  docker rmi -f "${imageID}"
+}
+
+pushImage ${repoName} ${imageTag}
