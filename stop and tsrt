@@ -1,75 +1,16 @@
-error: externally-managed-environment
-
-? This environment is externally managed
-??> 
-    The system-wide python installation should be maintained using the system
-    package manager (apk) only.
-    
-    If the package in question is not packaged already (and hence installable via
-    "apk add py3-somepackage"), please consider installing it inside a virtual
-    environment, e.g.:
-    
-    python3 -m venv /path/to/venv
-    . /path/to/venv/bin/activate
-    pip install mypackage
-    
-    To exit the virtual environment, run:
-    
-    deactivate
-    
-    The virtual environment is not deleted, and can be re-entered by re-sourcing
-    the activate file.
-    
-    To automatically manage virtual environments, consider using pipx (from the
-    pipx package).
-
-note: If you believe this is a mistake, please contact your Python installation or OS distribution provider. You can override this, at the risk of breaking your Python installation or OS, by passing --break-system-packages.
-hint: See PEP 668 for the detailed specification.
-[0m
-
-> Task :buildUIImage FAILED
-
-FAILURE: Build failed with an exception.
-
-* What went wrong:
-Execution failed for task ':buildUIImage'.
-> Could not build image: The command '/bin/sh -c apk add --update --no-cache curl py-pip &&     apk update --no-cache make git     build-base &&     pip install virtualenv &&     rm -rf /var/cache/apk/* &&     set -ex &&     apk add --no-cache  --virtual .build-deps build-base &&     gcc  -shared -fPIC /lib/stack-fix.c -o /lib/stack-fix.so &&     apk del .build-deps' returned a non-zero code: 1
-
-* Try:
-> Run with --stacktrace option to get the stack trace.
-> Run with --info or --debug option to get more log output.
-> Run with --scan to get full insights.
-
-* Get more help at https://help.gradle.org
-
-BUILD FAILED in 39s
-7 actionable tasks: 5 executed, 2 up-to-date
-[Pipeline] }
-[Pipeline] // stage
-[Pipeline] }
-[Pipeline] // withEnv
-[Pipeline] }
-[Pipeline] // node
-[Pipeline] End of Pipeline
-ERROR: script returned exit code 1
-Finished: FAILURE
-================================
-FROM node:22.9.0-alpin
-RUN apk add --update --no-cache curl py-pip && \
-    apk update --no-cache make git \
-    build-base && \
-    pip install virtualenv && \
-    rm -rf /var/cache/apk/* && \
-    set -ex && \
-    apk add --no-cache  --virtual .build-deps build-base && \
-    gcc  -shared -fPIC /lib/stack-fix.c -o /lib/stack-fix.so && \
-    apk del .build-deps
-
-
 FROM node:22.9.0-alpine
 
-# Install system packages including necessary tools
-RUN apk add --no-cache curl make git build-base
+# Install system packages including Python 3, pip, and necessary tools
+RUN apk add --no-cache python3 py3-pip curl make git build-base
+
+# Create a virtual environment using Python's built-in venv
+RUN python3 -m venv /venv
+
+# Install your required Python packages in the virtual environment
+RUN /venv/bin/pip install your-package  # Replace 'your-package' with the actual package name
+
+# Set the PATH to include the virtual environment
+ENV PATH="/venv/bin:$PATH"
 
 # Build your C code and clean up build dependencies
 RUN set -ex && \
@@ -81,4 +22,166 @@ RUN set -ex && \
 # RUN rm -rf /var/cache/apk/*
 
 # Continue with your other build steps...
+==============================================
+FROM node:22.9.0-alpine
 
+# Install system packages including Python 3, pip, and necessary tools
+RUN apk add --no-cache python3 py3-pip curl make git build-base
+
+# Create a virtual environment
+RUN python3 -m venv /venv
+
+# Install virtualenv (only if it's not already installed)
+RUN /venv/bin/pip install virtualenv
+
+# Set the PATH to include the virtual environment
+ENV PATH="/venv/bin:$PATH"
+
+# Build your C code and clean up build dependencies
+RUN set -ex && \
+    apk add --no-cache --virtual .build-deps build-base && \
+    gcc -shared -fPIC /lib/stack-fix.c -o /lib/stack-fix.so && \
+    apk del .build-deps
+
+# Optional: Clean up (uncomment if you want to clean up)
+# RUN rm -rf /var/cache/apk/*
+
+# Continue with your other build steps...
+===============================================================
+FROM node:22.9.0-alpine
+
+# Install system packages including Python 3, pip, and necessary tools
+RUN apk add --no-cache python3 py3-pip curl make git build-base
+
+# Create a virtual environment
+RUN python3 -m venv /venv
+
+# Install virtualenv (only if it's not already installed)
+RUN /venv/bin/pip install virtualenv
+
+# Activate the virtual environment and install your required Python packages
+RUN /bin/sh -c "source /venv/bin/activate && pip install your-package"  # Replace 'your-package' with the actual package name
+
+# Set the PATH to include the virtual environment
+ENV PATH="/venv/bin:$PATH"
+
+# Build your C code and clean up build dependencies
+RUN set -ex && \
+    apk add --no-cache --virtual .build-deps build-base && \
+    gcc -shared -fPIC /lib/stack-fix.c -o /lib/stack-fix.so && \
+    apk del .build-deps
+
+# Optional: Clean up (uncomment if you want to clean up)
+# RUN rm -rf /var/cache/apk/*
+
+# Continue with your other build steps...
+==========================================
+FROM node:22.9.0-alpine
+
+# Install system packages including Python 3, pip, and necessary tools
+RUN apk add --no-cache python3 py3-pip curl make git build-base
+
+# Install virtualenv Python package
+RUN pip install virtualenv
+
+# Create a virtual environment using virtualenv
+RUN virtualenv /venv
+
+# Activate the virtual environment and install your required Python packages
+# Replace 'your-package' with the actual package name(s) you want to install
+RUN /bin/sh -c "source /venv/bin/activate && pip install your-package"
+
+# Set the PATH to include the virtual environment
+ENV PATH="/venv/bin:$PATH"
+
+# Build your C code and clean up build dependencies
+RUN set -ex && \
+    apk add --no-cache --virtual .build-deps build-base && \
+    gcc -shared -fPIC /lib/stack-fix.c -o /lib/stack-fix.so && \
+    apk del .build-deps
+
+# Optional: Clean up (uncomment if you want to clean up)
+# RUN rm -rf /var/cache/apk/*
+
+# Continue with your other build steps...
+============================
+FROM node:22.9.0-alpine
+
+# Install system packages including Python 3, pip, and necessary tools
+RUN apk add --no-cache python3 py3-pip curl make git build-base
+
+# Install virtualenv
+RUN pip install virtualenv
+
+# Create a virtual environment using virtualenv
+RUN virtualenv /venv
+
+# Activate the virtual environment and install your required Python packages
+RUN /bin/sh -c "source /venv/bin/activate && pip install your-package"  # Replace 'your-package' with the actual package name
+
+# Set the PATH to include the virtual environment
+ENV PATH="/venv/bin:$PATH"
+
+# Build your C code and clean up build dependencies
+RUN set -ex && \
+    apk add --no-cache --virtual .build-deps build-base && \
+    gcc -shared -fPIC /lib/stack-fix.c -o /lib/stack-fix.so && \
+    apk del .build-deps
+
+# Optional: Clean up (uncomment if you want to clean up)
+# RUN rm -rf /var/cache/apk/*
+
+# Continue with your other build steps...
+================================
+FROM node:22.9.0-alpine
+
+# Install system packages including Python 3, pip, and necessary tools
+RUN apk add --no-cache python3 py3-pip curl make git build-base
+
+# Install virtualenv (only if it's not already installed in your base image)
+RUN pip install virtualenv
+
+# Create a virtual environment using virtualenv
+RUN virtualenv /venv
+
+# Activate the virtual environment and install your required Python packages
+RUN /bin/sh -c "source /venv/bin/activate && pip install your-package"  # Replace 'your-package' with the actual package name
+
+# Set the PATH to include the virtual environment
+ENV PATH="/venv/bin:$PATH"
+
+# Build your C code and clean up build dependencies
+RUN set -ex && \
+    apk add --no-cache --virtual .build-deps build-base && \
+    gcc -shared -fPIC /lib/stack-fix.c -o /lib/stack-fix.so && \
+    apk del .build-deps
+
+# Optional: Clean up (uncomment if you want to clean up)
+# RUN rm -rf /var/cache/apk/*
+
+# Continue with your other build steps...
+=========================================
+FROM node:22.9.0-alpine
+
+# Install system packages including Python 3, pip, and necessary tools
+RUN apk add --no-cache python3 py3-pip curl make git build-base
+
+# Create a virtual environment
+RUN python3 -m venv /venv
+
+# Activate the virtual environment and install your required Python packages
+RUN /bin/sh -c "source /venv/bin/activate && pip install your-package"  # Replace 'your-package' with the actual package name
+
+# Set the PATH to include the virtual environment
+ENV PATH="/venv/bin:$PATH"
+
+# Build your C code and clean up build dependencies
+RUN set -ex && \
+    apk add --no-cache --virtual .build-deps build-base && \
+    gcc -shared -fPIC /lib/stack-fix.c -o /lib/stack-fix.so && \
+    apk del .build-deps
+
+# Optional: Clean up (uncomment if you want to clean up)
+# RUN rm -rf /var/cache/apk/*
+
+# Continue with your other build steps...
