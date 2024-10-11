@@ -54,5 +54,13 @@ BUILD FAILED in 39s
 ERROR: script returned exit code 1
 Finished: FAILURE
 ================================
+FROM node:22.9.0-alpin
 RUN apk add --update --no-cache curl py-pip && \
     apk update --no-cache make git \
+    build-base && \
+    pip install virtualenv && \
+    rm -rf /var/cache/apk/* && \
+    set -ex && \
+    apk add --no-cache  --virtual .build-deps build-base && \
+    gcc  -shared -fPIC /lib/stack-fix.c -o /lib/stack-fix.so && \
+    apk del .build-deps
