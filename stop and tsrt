@@ -1,56 +1,58 @@
-stage('Scale EKS Node Group') {
-    steps {
-        script {
-            withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-                withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                    
-                    // Define the desired capacities for the two node groups
-                    def desired_capacities = [
-                        "nodegroupA": "3",  // Desired capacity for node group A
-                        "nodegroupB": "2"   // Desired capacity for node group B
-                    ]
+error: externally-managed-environment
 
-                    // Check the operation type (start or stop)
-                    def operationType = op_eks.toLowerCase() // Convert to lowercase for consistent comparison
-                    echo "Operation Type: ${operationType}"
+? This environment is externally managed
+??> 
+    The system-wide python installation should be maintained using the system
+    package manager (apk) only.
+    
+    If the package in question is not packaged already (and hence installable via
+    "apk add py3-somepackage"), please consider installing it inside a virtual
+    environment, e.g.:
+    
+    python3 -m venv /path/to/venv
+    . /path/to/venv/bin/activate
+    pip install mypackage
+    
+    To exit the virtual environment, run:
+    
+    deactivate
+    
+    The virtual environment is not deleted, and can be re-entered by re-sourcing
+    the activate file.
+    
+    To automatically manage virtual environments, consider using pipx (from the
+    pipx package).
 
-                    // Get the desired capacity for the selected node group
-                    def selected_capacity = desired_capacities[eks_nodegroup]
+note: If you believe this is a mistake, please contact your Python installation or OS distribution provider. You can override this, at the risk of breaking your Python installation or OS, by passing --break-system-packages.
+hint: See PEP 668 for the detailed specification.
+[0m
 
-                    if (selected_capacity != null) {
-                        // Initialize scaling parameters
-                        def min_size, max_size, desired_size
+> Task :buildUIImage FAILED
 
-                        // Use switch to determine scaling parameters based on operation type
-                        switch (operationType) {
-                            case 'start':
-                                min_size = selected_capacity
-                                max_size = selected_capacity
-                                desired_size = selected_capacity
-                                break
-                            case 'stop':
-                                min_size = "1" // Keep minSize as 1
-                                max_size = "0" // Limit maxSize to 1 
-                                desired_size = "0" // Set desiredSize to 0 to stop
-                                break
-                            default:
-                                error("Invalid operation type: ${operationType}")
-                        }
+FAILURE: Build failed with an exception.
 
-                        echo "Scaling node group ${eks_nodegroup} to desired capacity: ${desired_size} with min size: ${min_size} and max size: ${max_size}"
+* What went wrong:
+Execution failed for task ':buildUIImage'.
+> Could not build image: The command '/bin/sh -c apk add --update --no-cache curl py-pip &&     apk update --no-cache make git     build-base &&     pip install virtualenv &&     rm -rf /var/cache/apk/* &&     set -ex &&     apk add --no-cache  --virtual .build-deps build-base &&     gcc  -shared -fPIC /lib/stack-fix.c -o /lib/stack-fix.so &&     apk del .build-deps' returned a non-zero code: 1
 
-                        // Execute the scaling command
-                        def scale_nodegroup = sh (
-                            script: "aws eks update-nodegroup-config --cluster-name $eks_cluster --nodegroup-name $eks_nodegroup --scaling-config minSize=$min_size,maxSize=$max_size,desiredSize=$desired_size",
-                            returnStdout: true
-                        ).trim()
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
 
-                        echo "Scaled node group $eks_nodegroup to desired capacity $desired_size with min size $min_size and max size $max_size"
-                    } else {
-                        echo "Node group ${eks_nodegroup} not found"
-                    }
-                }
-            }
-        }
-    }
-}
+* Get more help at https://help.gradle.org
+
+BUILD FAILED in 39s
+7 actionable tasks: 5 executed, 2 up-to-date
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+ERROR: script returned exit code 1
+Finished: FAILURE
+================================
+RUN apk add --update --no-cache curl py-pip && \
+    apk update --no-cache make git \
