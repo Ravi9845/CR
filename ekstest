@@ -4,40 +4,51 @@ stage('Scale Up ASG') {
             withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
                 withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
                     try {
-                        // Fetch all ASG names associated with the instance ID(s)
-                        def asg_names = sh(script: "aws autoscaling describe-auto-scaling-instances --instance-ids $InstanceId --output text --query 'AutoScalingInstances[*].AutoScalingGroupName'", returnStdout: true).trim()
-                        echo "Auto Scaling Groups: $asg_names"
+                        // Auto Scaling Group name (can be passed as a parameter to the pipeline)
+                        def asg_name = params.ASG_NAME  // ASG name passed as a parameter to the Jenkins pipeline
+                        echo "Auto Scaling Group: $asg_name"
                         
                         def asg_map = [
                             "stack-12345": 2,
                             "test-ec2-ssrs": 4
                         ]
                         
-                        // Iterate over each ASG name found and update its desired capacity
-                        asg_names.split().each { asg_name ->
-                            def desired_cap = asg_map[asg_name] ?: 0
-                            echo "Auto Scaling Group: $asg_name, Desired Capacity: $desired_cap"
-                            
-                            switch ("$op") {
-                                case "Start":
-                                    if (!asg_name.isEmpty()) {
-                                        echo "Updating desired capacity for ASG $asg_name to $desired_cap"
-                                        def update_desired_cap = sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity $desired_cap", returnStdout: true).trim()
-                                        echo "ASG $asg_name scaled to desired capacity of $desired_cap"
-                                    } else {
-                                        echo "No auto-scaling group exists for $EC2_Instance"
-                                    }
-                                    break;
+                        def desired_cap = asg_map[asg_name] ?: 0
+                        echo "Auto Scaling Group: $asg_name, Desired Capacity: $desired_cap"
+                        
+                        // Check for suspended processes in the Auto Scaling Group
+                        def suspended_processes = sh(script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg_name --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text", returnStdout: true).trim()
+                        
+                        if (!suspended_processes.isEmpty()) {
+                            echo "Suspended processes found for ASG $asg_name: $suspended_processes"
+                            // Resume suspended processes
+                            sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg_name", returnStdout: true).trim()
+                            echo "Resumed suspended processes for ASG $asg_name"
+                        } else {
+                            echo "No suspended processes found for ASG $asg_name"
+                        }
 
-                                case "Stop":
-                                    def update_desired_cap = sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity 0", returnStdout: true).trim()
-                                    echo "ASG $asg_name scaled down to desired capacity of 0"
-                                    break;
+                        // Scale up or down the Auto Scaling Group based on the operation
+                        switch ("$op") {
+                            case "Start":
+                                echo "Updating desired capacity for ASG $asg_name to $desired_cap"
+                                sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity $desired_cap", returnStdout: true).trim()
+                                echo "ASG $asg_name scaled to desired capacity of $desired_cap"
+                                
+                                // Wait for instances to launch and check their state
+                                def instance_state = sh(script: "aws autoscaling describe-auto-scaling-instances --query 'AutoScalingInstances[?AutoScalingGroupName==\`$asg_name\`].LifecycleState' --output text", returnStdout: true).trim()
+                                echo "Instance states for ASG $asg_name: $instance_state"
+                                break;
 
-                                default:
-                                    echo "No operation specified"
-                                    break;
-                            }
+                            case "Stop":
+                                echo "Stopping all instances in ASG $asg_name by setting desired capacity to 0"
+                                sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity 0", returnStdout: true).trim()
+                                echo "ASG $asg_name scaled down to desired capacity of 0"
+                                break;
+
+                            default:
+                                echo "No operation specified"
+                                break;
                         }
                     } catch (err) {
                         echo "ERROR CAUGHT: $err"
