@@ -58,3 +58,5 @@ stage('Scale Up ASG') {
         }
     }
 }
+unexpected char: '\' @ line , column .
+   tances[?AutoScalingGroupName==\`$asg_nam
