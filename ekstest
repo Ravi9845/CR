@@ -1,74 +1,74 @@
-   pipeline {
-  agent {
-		label 'test'
-	}
-  environment{
-    def asg_name1 = "$env.asg_name"
-    def op1 = "$env.asg_operation"
-
-    
-  }
-stage('Scale Up ASG') {
-    steps {
-        script {
-            withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-                withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                    try {
-                        // Auto Scaling Group name (can be passed as a parameter to the pipeline)
-                        // def asg_name = "$asg_name1"  // ASG name passed as a parameter to the Jenkins pipeline
-                        // echo "Auto Scaling Group: $asg_name"
-                        
-                        def asg_map = [
-                            "test-asg": 2,
-                            "test-ec2": 4
-                        ]
-                        def asg_map1 = [
-                            "test-asg": 1,
-                            "test-ec2": 4
-                        ]
-                        
-                        def desired_cap = asg_map[asg_name1] ?: 0
-                        echo "Auto Scaling Group: $asg_name1, Desired Capacity: $desired_cap"
-
-                        def min_cap = asg_map1[asg_name1] ?: 0
-                        echo "Auto Scaling Group: $asg_name1, Desired Capacity: $desired_cap"
-                        
-                        // Check for suspended processes in the Auto Scaling Group
-                        def suspended_processes = sh(script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg_name1 --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text", returnStdout: true).trim()
-                        
-                        if (!suspended_processes.isEmpty()) {
-                            echo "Suspended processes found for ASG $asg_name1: $suspended_processes"
-                            // Resume suspended processes
-                            sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg_name1", returnStdout: true).trim()
-                            echo "Resumed suspended processes for ASG $asg_name1"
-                        } else {
-                            echo "No suspended processes found for ASG $asg_name1"
-                        }
-
-                        // Scale up or down the Auto Scaling Group based on the operation
-                        switch ("$op1") {
-                            case "Start":
-                                echo "Updating desired capacity for ASG $asg_name1 to $desired_cap"
-                                sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity $desired_cap --min-size $min_cap", returnStdout: true).trim()
-                                echo "ASG $asg_name1 scaled to desired capacity of $desired_cap"
+pipeline {
+    agent {
+        label 'test'
+    }
+    environment {
+        // Define environment variables for ASG name and operation
+        def asg_name1 = "${env.asg_name}"
+        def op1 = "${env.asg_operation}"
+    }
+    stages {
+        stage('Scale Up ASG') {
+            steps {
+                script {
+                    withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+                        withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+                            try {
+                                // Mapping for desired and minimum capacities
+                                def capacityMap = [
+                                    "test-asg": [desired: 2, min: 1],
+                                    "test-ec2": [desired: 4, min: 4]
+                                ]
                                 
-                                // Wait for instances to launch and check their state
-                                def instance_state = sh(script: "aws autoscaling describe-auto-scaling-instances --query 'AutoScalingInstances[?AutoScalingGroupName==\"$asg_name1\"].LifecycleState' --output text", returnStdout: true).trim()
-                                echo "Instance states for ASG $asg_name1: $instance_state"
-                                break;
+                                // Check if the ASG name exists in the capacityMap
+                                if (!capacityMap.containsKey(asg_name1)) {
+                                    error "Auto Scaling Group '$asg_name1' not found in the capacity map."
+                                }
 
-                            case "Stop":
-                                echo "Stopping all instances in ASG $asg_name1 by setting desired capacity to 0"
-                                sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity 0 --min-size 0", returnStdout: true).trim()
-                                echo "ASG $asg_name1 scaled down to desired capacity of 0"
-                                break;
+                                // Retrieve desired and minimum capacities
+                                def desired_cap = capacityMap[asg_name1].desired
+                                def min_cap = capacityMap[asg_name1].min
+                                
+                                echo "Auto Scaling Group: $asg_name1, Desired Capacity: $desired_cap, Minimum Capacity: $min_cap"
 
-                            default:
-                                echo "No operation specified"
-                                break;
+                                // Check for suspended processes in the Auto Scaling Group
+                                def suspended_processes = sh(script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg_name1 --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text", returnStdout: true).trim()
+
+                                if (!suspended_processes.isEmpty()) {
+                                    echo "Suspended processes found for ASG $asg_name1: $suspended_processes"
+                                    // Resume suspended processes
+                                    sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg_name1", returnStdout: true).trim()
+                                    echo "Resumed suspended processes for ASG $asg_name1"
+                                } else {
+                                    echo "No suspended processes found for ASG $asg_name1"
+                                }
+
+                                // Scale up or down the Auto Scaling Group based on the operation
+                                switch (op1) {
+                                    case "Start":
+                                        echo "Updating desired capacity for ASG $asg_name1 to $desired_cap"
+                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity $desired_cap --min-size $min_cap", returnStdout: true).trim()
+                                        echo "ASG $asg_name1 scaled to desired capacity of $desired_cap"
+
+                                        // Wait for instances to launch and check their state
+                                        def instance_state = sh(script: "aws autoscaling describe-auto-scaling-instances --query 'AutoScalingInstances[?AutoScalingGroupName==\"$asg_name1\"].LifecycleState' --output text", returnStdout: true).trim()
+                                        echo "Instance states for ASG $asg_name1: $instance_state"
+                                        break;
+
+                                    case "Stop":
+                                        echo "Stopping all instances in ASG $asg_name1 by setting desired capacity to 0"
+                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity 0 --min-size 0", returnStdout: true).trim()
+                                        echo "ASG $asg_name1 scaled down to desired capacity of 0"
+                                        break;
+
+                                    default:
+                                        echo "No valid operation specified"
+                                        break;
+                                }
+                            } catch (err) {
+                                echo "ERROR CAUGHT: $err"
+                            }
                         }
-                    } catch (err) {
-                        echo "ERROR CAUGHT: $err"
                     }
                 }
             }
