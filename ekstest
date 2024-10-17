@@ -1,100 +1,49 @@
-stage('start EC2 instance'){
-      steps{
-        script{
-          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                try{
-                  // to store the instance id
-                   InstanceId = sh(script:'aws ec2 describe-instances --filters Name=tag:Name,Values=$EC2_Instance --query "Reservations[*].Instances[*].InstanceId" --output text', returnStdout:true).trim()
-                  def lines = InstanceId.readLines()
-                    InstanceId_asg  =lines[0].trim()
-                  echo "$EC2_Instance ID is $InstanceId"
-
-                  // get instance status
-                   instance_status = sh(script:'aws ec2 describe-instances --filters "Name=tag:Name,Values=$EC2_Instance" "Name=instance-state-name,Values=running,stopped" | jq \'.Reservations[0].Instances[0].State.Name\' | tr -d \'"\'' , returnStdout:true).trim()    
-                     
-                  switch ("$op"){
-
-                    case "Start":
-                          if ("$instance_status"=="stopped"){
-                            start_instances = sh(script: "aws ec2 start-instances --instance-ids $InstanceId", returnStdout:true).trim()
-                            echo "Instance $InstanceId is now started"
-                          }
-                          else if ("$instance_status"=="running"){
-                              echo "Instance $InstanceId is already running"
-                          }
-                          else{
-                            echo "ERROR"
-                          }
-                    break;
-
-                    case "Stop":
-                          if ("$instance_status"=="stopped"){
-                            echo "Instance $InstanceId is already in stop state"
-                          }
-                          else if ("$instance_status"=="running"){
-                            stop_instances = sh(script: "aws ec2 stop-instances --instance-ids $InstanceId", returnStdout:true).trim()
-                            echo "Stopped - $InstanceId"
-                          }
-                    break;
-
-                    case "Status":
-                          echo "EC2 status - $instance_status" 
-                    break;
-                  }
-                }
-                catch(err){
-                  echo "ERROR CAUGHT: $err"
-                }           
-            }
-          }
-        }
-      }
-    }
 stage('Scale Up ASG') {
-      steps{
-        script{
-          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-              try{
-                asg_name = sh(script:"aws autoscaling describe-auto-scaling-instances --instance-ids $InstanceId --output text --query 'AutoScalingInstances[*].AutoScalingGroupName'", returnStdout:true).trim()
-                echo "$asg_name"
-                def desired_cap=0
-                def asg_map = [
-                                  "stack-12345":2,
-                                  "test-ec2-ssrs":4
-                                ]
-                switch("$op"){
-                  
-                  case "Start" :
-                          if (asg_name.isEmpty()) {
-                          echo "No auto-scaling group exists for $EC2_Instance"
-                        }
-                        else{
+    steps {
+        script {
+            withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+                withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+                    try {
+                        // Fetch all ASG names associated with the instance ID(s)
+                        def asg_names = sh(script: "aws autoscaling describe-auto-scaling-instances --instance-ids $InstanceId --output text --query 'AutoScalingInstances[*].AutoScalingGroupName'", returnStdout: true).trim()
+                        echo "Auto Scaling Groups: $asg_names"
+                        
+                        def asg_map = [
+                            "stack-12345": 2,
+                            "test-ec2-ssrs": 4
+                        ]
+                        
+                        // Iterate over each ASG name found and update its desired capacity
+                        asg_names.split().each { asg_name ->
+                            def desired_cap = asg_map[asg_name] ?: 0
+                            echo "Auto Scaling Group: $asg_name, Desired Capacity: $desired_cap"
+                            
+                            switch ("$op") {
+                                case "Start":
+                                    if (!asg_name.isEmpty()) {
+                                        echo "Updating desired capacity for ASG $asg_name to $desired_cap"
+                                        def update_desired_cap = sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity $desired_cap", returnStdout: true).trim()
+                                        echo "ASG $asg_name scaled to desired capacity of $desired_cap"
+                                    } else {
+                                        echo "No auto-scaling group exists for $EC2_Instance"
+                                    }
+                                    break;
 
-                          desired_cap = asg_map["$asg_name"]
-                          echo "Auto scaling group exists for $EC2_Instance desired cap is $desired_cap"
-                          update_desired_cap = sh(script:"aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity $desired_cap", returnStdout:true).trim()
-                        }
-                    break;
-                  
-                  case "Stop" :
-                    update_desired_cap = sh(script:"aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity $desired_cap", returnStdout:true).trim()
-                    break;
-                  default :
-                  echo "NO operation"
-                  break;
+                                case "Stop":
+                                    def update_desired_cap = sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity 0", returnStdout: true).trim()
+                                    echo "ASG $asg_name scaled down to desired capacity of 0"
+                                    break;
 
+                                default:
+                                    echo "No operation specified"
+                                    break;
+                            }
+                        }
+                    } catch (err) {
+                        echo "ERROR CAUGHT: $err"
+                    }
                 }
-                
-                
-              } 
-              catch(err){
-                  echo "ERROR CAUGHT: $err"
-              } 
             }
-          }
-          
         }
-      }
     }
+}
