@@ -130,3 +130,82 @@
         }
       }
     }//ecs ends
+
+
+stage('Scale ECS Services Based on Cluster') {
+    when {
+        expression { rds_operation_success }  // Execute this stage only if RDS operation was successful
+    }    
+    steps {
+        script {
+            withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+                withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+                    
+                    // Define the desired counts for services based on the cluster
+                    def desired_counts = [:]
+                    if (ecs_cluster == "test-01") { 
+                        desired_counts = [
+                            "test-app01": "2", 
+                            "testing": "3"
+                        ]
+                    } else if (ecs_cluster == "test-ecs-cluster") { 
+                        desired_counts = [
+                            "test-01": "1"
+                        ]
+                    }
+
+                    // Assign the desired counts map to a variable for clarity
+                    def desired_count = desired_counts
+
+                    // Check the operation type (start or stop)
+                    def operationType = params.operationType // Assuming 'operationType' is passed as a parameter to the build
+                    echo "Operation Type: ${operationType}" // Debugging output
+
+                    // Use a switch case to handle the start and stop operations
+                    switch (operationType) {
+                        case 'start':
+                            echo "Starting ECS services in cluster ${ecs_cluster}"
+                            desired_count.each { service, count ->
+                                echo "Scaling service ${service} to desired count: ${count}" // Debugging output
+
+                                try {
+                                    // Execute the scaling command to start the service
+                                    def scale_service = sh (
+                                        script: "aws ecs update-service --cluster $ecs_cluster --service $service --desired-count $count",
+                                        returnStdout: true
+                                    ).trim()
+                                    echo "Successfully scaled service $service in cluster $ecs_cluster to desired count $count"
+                                } catch (Exception e) {
+                                    echo "Failed to scale service $service in cluster $ecs_cluster. Error: ${e.message}"
+                                }
+                            }
+                            break
+
+                        case 'stop':
+                            echo "Stopping ECS services in cluster ${ecs_cluster}"
+                            desired_count.each { service, _ ->
+                                echo "Scaling service ${service} to desired count: 0" // Debugging output
+
+                                try {
+                                    // Execute the scaling command to stop the service
+                                    def scale_service = sh (
+                                        script: "aws ecs update-service --cluster $ecs_cluster --service $service --desired-count 0",
+                                        returnStdout: true
+                                    ).trim()
+                                    echo "Successfully scaled service $service in cluster $ecs_cluster to desired count 0"
+                                } catch (Exception e) {
+                                    echo "Failed to scale service $service in cluster $ecs_cluster. Error: ${e.message}"
+                                }
+                            }
+                            break
+
+                        default:
+                            echo "Unknown operation type: ${operationType}. Please specify 'start' or 'stop'."
+                            break
+                    }
+                }
+            }
+        }
+    } 
+}
+
