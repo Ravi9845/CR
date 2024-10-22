@@ -1,13 +1,25 @@
+                    // Initialize desired counts for ASGs based on the ECS cluster
+                    def desired_counts_asg = [:]
+                    if (ecs_cluster == "123-ecs-cluster") {
+                        desired_counts_asg = [
+                            "1123-asg": [desired: 2, min: 1, max: 3]
+                        ]
+                    } else if (ecs_cluster == "456-ecs-cluster") {
+                        desired_counts_asg = [
+                            "test1_asg": [desired: 2, min: 1, max: 3]
+                        ]
+                    } else {
+                        error "No valid ASG found for the selected ECS cluster: $ecs_cluster"
+                    }
 
-                            def ecs_status = sh(
-                                script: "aws ecs describe-clusters --clusters $ecs_cluster --query 'clusters[0].status' --output text",
-                                returnStdout: true
-                            ).trim()
+                    // Iterate over the ASG configurations and update them
+                    desired_counts_asg.each { asg, count ->
+                        def desired_cap = count.desired
+                        def min_cap = count.min
+                        def max_cap = count.max
 
-                            if (ecs_status == "ACTIVE") {
-                                echo "ECS cluster $ecs_cluster is already active. Skipping scaling of services."
-                                return // Skip scaling if the cluster is active
-                            }
-                            else {
-                               echo "start the ECS cluster $ecs_cluster"
-                               sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity $desired_cap --min-size $min_cap --max-size $max_cap", returnStdout: true).trim()
+                        echo "Updating ASG $asg: Desired Capacity: $desired_cap, Minimum Capacity: $min_cap, Maximum Capacity: $max_cap"
+
+                        // Update the Auto Scaling Group using AWS CLI
+                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity $desired_cap --min-size $min_cap --max-size $max_cap", returnStdout: true)
+                    }
