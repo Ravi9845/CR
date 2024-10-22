@@ -6,14 +6,14 @@ pipeline {
     // AWS_DEPLOYMENT_REGION = "$env.AWS_DEPLOYMENT_REGION"
     AWS_DEPLOYMENT_REGION = "us-east-1"
     // STAGE = "$env.STAGE"
-    STAGE = "DEV"
+    STAGE = "RC1"
     AWS_CREDENTIAL = "aws_account_id_${STAGE.toLowerCase()}_${AWS_DEPLOYMENT_REGION.replace('-', '_')}"
-	AWS_ACCOUNT_ID = ''
+	  AWS_ACCOUNT_ID = ''
     AWS_IAM_ROLE_NAME = 'customer-environment-shutdown-startup'
     CICD_REGION = 'us-east-1'
     CICD_REGION_ROLE = ''
-	CICD_CREDENTIAL = 'aws_account_id_cicd_us_east_1'
-	CICD_ACCOUNT_ID = '' // Instance="$env.EC2_Instance"
+	  CICD_CREDENTIAL = 'aws_account_id_cicd_us_east_1'
+	  CICD_ACCOUNT_ID = '' // Instance="$env.EC2_Instance"
     EC2_Instance="$env.EC2_Instance"
     def InstanceId=" "
     def InstanceId_asg=" "
@@ -27,6 +27,8 @@ pipeline {
     def eks_cluster ="$env.EKS_cluster"
     def eks_nodegroup ="$env.EKS_NodeGroup"
     def op_eks="$env.EKS_operations"
+    def asg_name1 ="$env.ASG_name"
+    def op1 ="$env.asg_operation"
 
     
   }
@@ -42,7 +44,7 @@ pipeline {
 							CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-euw2'
 							break
 						case "eu-central-1":
-              CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-euc1'
+                            CICD_REGION_ROLE = 'jenkins-pipeline-assume-role-euc1'
 							break
 					}
 					withCredentials([string(credentialsId: CICD_CREDENTIAL, variable: 'CICD_ACCOUNT')]) {
@@ -107,135 +109,84 @@ pipeline {
           }
         }
       }
-    }// ec2 stage ends
-    // stage('Scale Up ECS Service') {
-    //   steps{
-    //     script{
-    //       withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-    //         withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-    //           //Get list of ECS Clusters
-    //           list_clusters_response = sh (
-    //             script: "aws ecs list-clusters --query clusterArns | xargs", returnStdout: true
-    //           ).trim()
-    //           clusters = list_clusters_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
-    //           //Loop though each ECS cluster to get list of Services
-    //           clusters.each { cluster ->
-    //             list_services_response = sh (
-    //               script: "aws ecs list-services --cluster $cluster --query serviceArns| xargs",returnStdout: true
-    //             ).trim()
-    //             echo "$list_services_response"
-    //             //Puts output in array format
-    //             services = list_services_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
-    //             //Loops through each service to change the desired service count
-    //             batch_services = []
-    //             non_batch_services = []
-    //             services.each { service ->
-    //               if (service.contains("Batch")){
-    //                 batch_services.add(service)
-    //               }
-    //               else{
-    //                 non_batch_services.add(service)
-    //               }
-    //             }
-    //             batch_services.each {service ->
-    //               desired_count = ""
-    //               if (service.contains("dm")) {
-    //                 desired_count = "2"
-    //               }
-		// 		          else if (service.contains("perf")) {
-    //                 desired_count = "5"
-    //               }
-    //               else {
-    //                 desired_count = "2"
-    //               }
-    //               scale_services = sh (
-    //                 script: "aws ecs update-service --cluster $cluster --service $service --desired-count $desired_count | xargs -0 ", returnStdout: true
-    //               ).trim()
-    //               echo "60 required wait for Batch"
-    //               sleep(60)
-    //             }
-    //             non_batch_services.each {service ->
-    //               desired_count = ""
-    //               if (service.contains("bpo")){
-    //                 desired_count = "1"
-    //               }
-		// 		          else if (service.contains("perf-BlazeRMA")) {
-    //                 desired_count = "1"
-    //               }
-    //               else {
-    //                 desired_count = "2"
-    //               }
-    //               scale_services = sh (
-    //                 script: "aws ecs update-service --cluster $cluster --service $service --desired-count $desired_count | xargs -0 ", returnStdout: true
-    //               ).trim()
-    //             }
-    //           }
-    //         }
-    //       }
-    //       // echo "Environment is now up and available. Please confirm applications are running properly"
-    //     }
-    //   }
-    // }//ecs ends
-
-    stage('Scale Up ASG') {
-      steps{
-        script{
-          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-              try{
-                asg_name = sh(script:"aws autoscaling describe-auto-scaling-instances --instance-ids $InstanceId_asg --output text --query 'AutoScalingInstances[*].AutoScalingGroupName'", returnStdout:true).trim()
-                echo "$asg_name"
-                def desired_cap=0
-                def asg_map = [
-                                  "dm-ec2-pgadmin":1,
-                                  "eks-dm-smarts-nodegroup-7ec6d95c-5130-a49a-a76b-2e4a97ed49c0":1,
-                                  "dm2-ec2-ecs": 4,
-                                  "crfs-dev-novus-ecs-asg": 2, 
-                                  "stack-p5prndih0fs7wi3ln-DMRuleServerUtilASG-OPY7o7wqIiyz": 1,
-                                  "stack-klhgdwqnnyuvw0gyw-ASG-ZV6EA0iwWuiG": 1, 
-                                  "stack-ecaljj2u0xznpbghu-DMRuleServerUtilASG-B6MK7y5kLk5y": 1, 
-                                  "ActiveMQ": 1, 
-                                  "Fileserver-ASG-testasg-deletelater": 1, 
-                                  "test-active-mq-george-cf-AutoScalingGroup-JqT0FkSF7ZeL": 1, 
-                                  "dm-ec2-openoffice": 1, 
-                                  "stack-tktb6ujjfemhzkjl3-ASG-PJANNCCG5PU7": 1,
-                                  "dm-ec2-etl": 2
+    }
+        stage('Scale Up ASG') {
+            steps {
+                script {
+                    withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+                        withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+                            try {
+                                // Mapping for desired and minimum capacities
+                                def capacityMap = [
+                                    "crfs-rc1-novus-ecs-asg": [desired: 2, min: 1, max: 3],
+                                    "stack-crmjrlk0dcbvtnvzp-FileserviceUtilASG-1DW3MV41UIJ0O": [desired: 1, min: 1, max: 2],
+                                    "dm-ec2-pgadmin": [desired: 1, min: 1, max: 2],
+                                    "stack-sq4jdyob2dqlwybkc-DMRuleServerUtilASG-LaqRULBI1eEL": [desired: 0, min: 0, max: 0],
+                                    "dm-ec2-etl": [desired: 2, min: 2, max: 3],
+                                    "dm2-ec2-ecs": [desired: 4, min: 4, max: 5],
+                                    "dm-rule-server-rc1-utility-host-DMRuleServerUtilASG-1P370Q8E8TN24": [desired: 1, min: 1, max: 2],
+                                    "dm-ec2-openoffice": [desired: 1, min: 1, max: 2],
+                                    "eks-rc1-smarts-nodegroup-20c7b217-f25a-9811-1b30-e5863ffc6d8c": [desired: 4, min: 4, max: 5],
+                                    "stack-zflgbkzclpewvcapp-ASG-de71l2E4Wut6": [desired: 2, min: 1, max: 3],
+                                    "dm-ec2-ecs": [desired: 3, min: 3, max: 4],
+                                    "stack-r3yujqsnuergidy3i-ASG-12OZ53CZMQYA1": [desired: 1, min: 1, max: 2]
                                 ]
-                switch("$op"){
-                  
-                  case "Start" :
-                          if (asg_name.isEmpty()) {
-                          echo "No auto-scaling group exists for $EC2_Instance"
-                        }
-                        else{
+                                
+                                // Check if the ASG name exists in the capacityMap
+                                if (!capacityMap.containsKey(asg_name1)) {
+                                    error "Auto Scaling Group '$asg_name1' not found in the capacity map."
+                                }
 
-                          desired_cap = asg_map["$asg_name"]
-                          echo "Auto scaling group exists for $EC2_Instance desired cap is $desired_cap"
-                          update_desired_cap = sh(script:"aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity $desired_cap", returnStdout:true).trim()
-                        }
-                    break;
-                  
-                  case "Stop" :
-                    update_desired_cap = sh(script:"aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --desired-capacity $desired_cap", returnStdout:true).trim()
-                    break;
-                  default :
-                  echo "NO operation"
-                  break;
+                                // Retrieve desired and minimum capacities
+                                def desired_cap = capacityMap[asg_name1].desired
+                                def min_cap = capacityMap[asg_name1].min
+                                def max_cap = capacityMap[asg_name1].max
+                                
+                                echo "Auto Scaling Group: $asg_name1, Desired Capacity: $desired_cap, Minimum Capacity: $min_cap, maximun Capacity: $max_cap"
 
+                                // Check for suspended processes in the Auto Scaling Group
+                                def suspended_processes = sh(script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg_name1 --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text", returnStdout: true).trim()
+
+                                if (!suspended_processes.isEmpty()) {
+                                    echo "Suspended processes found for ASG $asg_name1: $suspended_processes"
+                                    // Resume suspended processes
+                                    sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg_name1", returnStdout: true).trim()
+                                    echo "Resumed suspended processes for ASG $asg_name1"
+                                } else {
+                                    echo "No suspended processes found for ASG $asg_name1"
+                                }
+
+                                // Scale up or down the Auto Scaling Group based on the operation
+                                switch (op1) {
+                                    case "Start":
+                                        echo "Updating desired capacity for ASG $asg_name1 to $desired_cap"
+                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity $desired_cap --min-size $min_cap --max-size $max_cap", returnStdout: true).trim()
+                                        echo "ASG $asg_name1 scaled to desired capacity of $desired_cap"
+
+                                        // Wait for instances to launch and check their state
+                                        def instance_state = sh(script: "aws autoscaling describe-auto-scaling-instances --query 'AutoScalingInstances[?AutoScalingGroupName==\"$asg_name1\"].LifecycleState' --output text", returnStdout: true).trim()
+                                        echo "Instance states for ASG $asg_name1: $instance_state"
+                                        break;
+
+                                    case "Stop":
+                                        echo "Stopping all instances in ASG $asg_name1 by setting desired capacity to 0"
+                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity 0 --min-size 0  --max-size 0", returnStdout: true).trim()
+                                        echo "ASG $asg_name1 scaled down to desired capacity of 0"
+                                        break;
+
+                                    default:
+                                        echo "No valid operation specified"
+                                        break;
+                                }
+                            } catch (err) {
+                                echo "ERROR CAUGHT: $err"
+                            }
+                        }
+                    }
                 }
-                
-                
-              } 
-              catch(err){
-                  echo "ERROR CAUGHT: $err"
-              } 
             }
-          }
-          
         }
-      }
-    }//ecs stage
-    stage('starting RDS cluster') {
+      stage('starting RDS cluster') {
         steps{
         script{
           withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
@@ -320,17 +271,21 @@ pipeline {
                         
                         // Define the desired counts for services based on cluster
                         def desired_counts = [:]
-                        if (ecs_cluster == "callout-crfs") {
+                        if (ecs_cluster == "crfs-ui-cluster") {
                             desired_counts = [
-                                "callout-appservice": "2"
+                                "crfs-ui": "2"
                             ]
-                        } else if (ecs_cluster == "dm-ecs-cluster") {
+                        } else if (ecs_cluster == "cos-ecs-cluster") {
                             desired_counts = [
-                                "dm-BlazeRMA": "1",
-                                "dm-FileProcessor": "1",
-                                "dm-nginx": "2",
-                                "dm-nginx-ec2": "2",
-                                "dm-RestAPI": "2"
+                                "cos-app-service": "1",
+                                "cos-flyway": "1"
+                            ]
+                        } else if (ecs_cluster == "crfs-rc1-novus-ecs") {
+                            desired_counts = [
+                                "crfs-configuration": "1",
+                                "crfs-file-processing": "1",
+                                "crfs-flyway-migration": "1",
+                                "crfs-security": "1"
                             ]
                         } else if (ecs_cluster == "dm2-ecs-cluster") {
                             desired_counts = [
@@ -339,40 +294,35 @@ pipeline {
                                 "dm2-FileProcessor": "1",
                                 "dm2-RestAPI": "2"
                             ]
-                        } else if (ecs_cluster == "crfs-dev-novus-ecs") {
-                            desired_counts = [
-                                "crfs-configuration": "2",
-                                "crfs-file-processing": "2",
-                                "crfs-security": "2"
-                            ]
                         } else if (ecs_cluster == "dm-tenant-admin-cluster") {
                             desired_counts = [
-                                "dm-tenant-admin": "2",
-                                "dm2-tenant-admin": "2"
+                                "dm-tenant-admin": "1",
+                                "dm2-tenant-admin": "1"
                             ]
-                        } else if (ecs_cluster == "dev-cnrportal") {
+                        } else if (ecs_cluster == "dm-flyway-cluster") {
                             desired_counts = [
-                                "test-GXC-V2-Service-IGw44VECR17L": "2"
+                                "dm-flyway": "1",
+                                "dm2-flyway": "1"
                             ]
-                        } else if (ecs_cluster == "cos-ecs-cluster") {
+                        } else if (ecs_cluster == "dm-ecs-cluster") {
                             desired_counts = [
-                                "cos-app-service": "2",
+                                "dm-Batch": "2",
+                                "dm-BlazeRMA": "1",
+                                "dm-FileProcessor": "1",
+                                "dm-RestAPI": "2"
+
                             ]
-                        }  else if (ecs_cluster == "test01") {
-                            desired_counts = [
-                                "test01": "2",
-                            ]
-                        }             
+                        }            
                         // Check the operation type (start or stop)
-                        def operationType = op_ecs// This should be passed as a parameter
-                        echo "Operation Type: ${operationType}" // Debugging output
+                        def operationType = op_ecs
+                        echo "Operation Type: ${operationType}"
     
                         // Iterate over the services in the desired_counts map and update their desired count
                         desired_counts.each { service, count ->
                             // Determine the desired count based on operation type
                             def desired_count = operationType == 'start' ? count : "0" // Use the desired count when starting, or set to zero when stopping
     
-                            echo "Scaling service ${service} to desired count: ${desired_count}" // Debugging output
+                            echo "Scaling service ${service} to desired count: ${desired_count}"
     
                             // Execute the scaling command
                             def scale_service = sh (
@@ -387,65 +337,27 @@ pipeline {
               }
             } 
          }
-    // stage('Scale EKS Node Group') {
-    //     steps {
-    //         script {
-    //             withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-    //                 withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                        
-    //                     // Define the desired capacities for the two node groups
-    //                     def desired_capacities = [
-    //                         "test01" : "2",
-    //                         "dm-smarts-nodegroup-ps4": "3",  // Desired capacity for node group A
-    //                         "dm-smarts-nodegroup-ps34": "8"   // Desired capacity for node group B
-    //                     ]
-    
-    //                     // Check the operation type (start or stop)
-    //                     def operationType = op_eks // Convert to lowercase for consistent comparison
-    //                     echo "Operation Type: ${operationType}"
-    
-    //                     // Get the desired capacity for the selected node group
-    //                     def selected_capacity = desired_capacities[eks_nodegroup]
-    
-    //                     if (selected_capacity != null) {
-    //                         // Determine the desired capacity based on operation type
-    //                         def desired_capacity = (operationType == 'start') ? selected_capacity : "0" // Use the desired capacity when starting, or set to zero when stopping
-    
-    //                         echo "Scaling node group ${eks_nodegroup} to desired capacity: ${desired_capacity}"
-    
-    //                         // Execute the scaling command
-    //                         def scale_nodegroup = sh (
-    //                             script: "aws eks update-nodegroup-config --cluster-name $eks_cluster --nodegroup-name $eks_nodegroup --scaling-config minSize=$desired_capacity,maxSize=$desired_capacity,desiredSize=$desired_capacity",
-    //                             returnStdout: true
-    //                         ).trim()
-    
-    //                         echo "Scaled node group $eks_nodegroup to desired capacity $desired_capacity"
-    //                     } else {
-    //                         echo "Node group ${eks_nodegroup} not found"
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //       }
-    //     } 
-    //   }
-    // }
-    
     stage('Scale EKS Node Group') {
         steps {
             script {
                 withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
                     withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
                         
-                        // Define the desired capacities for the two node groups
                         def desired_capacities = [
-                            "test01": "2",
-                            "nodegroupB": "2"
+                        "dm-smarts-nodegroup": "1",
+                        "dm-smarts-nodegroup-ps4": "4",
+                        "dm-smarts-nodegroup-ps34": "1"
                         ]
     
                         // Check the operation type (start or stop)
-                        def operationType = op_eks // Convert to lowercase for consistent comparison
+                        def operationType = op_eks
                         echo "Operation Type: ${operationType}"
+
+                        // Exit the stage early if operation type is non
+                        if (operationType == 'none') {
+                            echo "operationType is 'none', skipping the scaling step."
+                            return
+                        }
     
                         // Get the desired capacity for the selected node group
                         def selected_capacity = desired_capacities[eks_nodegroup]
