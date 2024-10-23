@@ -1,129 +1,19 @@
- stage('Scale ECS Services Based on Cluster') {
-        when {
-          expression { rds_operation_success }  // Execute this stage only if RDS operation was successful
-        }    
-        steps {
-            script {
-                withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-                    withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                    def desired_counts_asg = [:]
-                    if (ecs_cluster == "dm2-ecs-cluster") {
-                        desired_counts_asg = [
-                            "dm2-ec2-ecs": [desired: 3, min: 3, max: 4]
-                        ]
-                    } else if (ecs_cluster == "dm-ecs-cluster") {
-                        desired_counts_asg = [
-                            "dm-ec2-ecs": [desired: 3, min: 3, max: 4]
-                        ]
-                    } else if (ecs_cluster == "crfs-rc1-novus-ecs") {
-                        desired_counts_asg = [
-                            "crfs-rc1-novus-ecs-asg": [desired: 2, min: 1, max: 3]
-                        ]
+if (desired_counts_asg) {
+                        desired_counts_asg.each { asg, count ->
+                            def desired_cap_asg = count.desired
+                            def min_cap_asg = count.min
+                            def max_cap_asg = count.max
+                            switch (op_ecs) {
+                                case "start":
+                                    echo "Updating ASG $asg: Desired Capacity: $desired_cap_asg, Minimum Capacity: $min_cap_asg, Maximum Capacity: $max_cap_asg"
+                                    // Update the Auto Scaling Group using AWS CLI
+                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity $desired_cap_asg --min-size $min_cap_asg --max-size $max_cap_asg", returnStdout: true)
+                                    break
+                                case "stop":
+                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity 0 --min-size 0  --max-size 0", returnStdout: true).trim()
+                                    break
+                            }
+                        }
                     } else {
-                        error "No valid ASG found for the selected ECS cluster: $ecs_cluster"
+                        echo "No ASG associated with the selected ECS cluster: $ecs_cluster. Skipping ASG update."
                     }
-
-                    // Iterate over the ASG configurations and update them
-                    desired_counts_asg.each { asg, count ->
-                        def desired_cap_asg = count.desired
-                        def min_cap_asg = count.min
-                        def max_cap_asg = count.max
-                    switch (op_ecs) {
-                      case "start":
-                          echo "Updating ASG $asg: Desired Capacity: $desired_cap_asg, Minimum Capacity: $min_cap_asg, Maximum Capacity: $max_cap_asg"
-                        // Update the Auto Scaling Group using AWS CLI
-                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity $desired_cap_asg --min-size $min_cap_asg --max-size $max_cap_asg", returnStdout: true)
-                        break
-                      case "stop":
-                          sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity 0 --min-size 0  --max-size 0", returnStdout: true).trim()
-                          break
-                    }    
-                  }     
-                        // Define the desired counts for services based on cluster
-                        def desired_counts = [:]
-                        if (ecs_cluster == "crfs-ui-cluster") {
-                            desired_counts = [
-                                "crfs-ui": "2"
-                            ]
-                        } else if (ecs_cluster == "cos-ecs-cluster") {
-                            desired_counts = [
-                                "cos-app-service": "1",
-                                "cos-flyway": "1"
-                            ]
-                        } else if (ecs_cluster == "crfs-rc1-novus-ecs") {
-                            desired_counts = [
-                                "crfs-configuration": "1",
-                                "crfs-file-processing": "1",
-                                "crfs-flyway-migration": "1",
-                                "crfs-security": "1"
-                            ]
-                        } else if (ecs_cluster == "dm2-ecs-cluster") {
-                            desired_counts = [
-                                "dm2-Batch": "2",
-                                "dm2-BlazeRMA": "1",
-                                "dm2-FileProcessor": "1",
-                                "dm2-RestAPI": "2"
-                            ]
-                        } else if (ecs_cluster == "dm-tenant-admin-cluster") {
-                            desired_counts = [
-                                "dm-tenant-admin": "1",
-                                "dm2-tenant-admin": "1"
-                            ]
-                        } else if (ecs_cluster == "dm-flyway-cluster") {
-                            desired_counts = [
-                                "dm-flyway": "1",
-                                "dm2-flyway": "1"
-                            ]
-                        } else if (ecs_cluster == "dm-ecs-cluster") {
-                            desired_counts = [
-                                "dm-Batch": "2",
-                                "dm-BlazeRMA": "1",
-                                "dm-FileProcessor": "1",
-                                "dm-RestAPI": "2"
-                            ]
-                        }
-                         else if (ecs_cluster == "dm-bpocloud-cluster") {
-                            desired_counts = [
-                                "bpocloud-blitzen": "1",
-                                "bpocloud-blitzen-db": "1",
-                                "bpocloud-comet": "1",
-                                "bpocloud-comet-db": "1",
-                                "bpocloud-cupid": "1",
-                                "bpocloud-cupid-db": "1",
-                                "bpocloud-dancer": "1",
-                                "bpocloud-dancer-db": "1",
-                                "bpocloud-dasher-db": "1",
-                                "bpocloud-donner-db": "1",
-                                "bpocloud-perftest-db": "1",
-                                "bpocloud-prancer-db": "1",
-                                "bpocloud-rudolph-db": "1",
-                                "bpocloud-santa-db": "1",
-                                "bpocloud-vixen-db": "1",
-                                "dm-bpo-ui": "1"
-                            ]
-                        }            
-                        // Check the operation type (start or stop)
-                        def operationType = op_ecs
-                        echo "Operation Type: ${operationType}"
-    
-                        // Iterate over the services in the desired_counts map and update their desired count
-                        desired_counts.each { service, count ->
-                            // Determine the desired count based on operation type
-                            def desired_count = operationType == 'start' ? count : "0" // Use the desired count when starting, or set to zero when stopping
-    
-                            echo "Scaling service ${service} to desired count: ${desired_count}"
-    
-                            // Execute the scaling command
-                            def scale_service = sh (
-                                script: "aws ecs update-service --cluster $ecs_cluster --service $service --desired-count $desired_count",
-                                returnStdout: true
-                            ).trim()
-    
-                            echo "Scaled service $service in cluster $ecs_cluster to desired count $desired_count"
-                        }
-                    }
-                }
-              }
-            } 
-         }
-    
