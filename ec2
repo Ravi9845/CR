@@ -27,3 +27,8 @@ case "start":
                                         }
                                     }
                                     break
+                                case "stop":
+                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity 0 --min-size 0  --max-size 0", returnStdout: true).trim()
+                                    break
+                            }
+                        }
