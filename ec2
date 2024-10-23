@@ -1,19 +1,29 @@
-if (desired_counts_asg) {
-                        desired_counts_asg.each { asg, count ->
-                            def desired_cap_asg = count.desired
-                            def min_cap_asg = count.min
-                            def max_cap_asg = count.max
-                            switch (op_ecs) {
-                                case "start":
+case "start":
                                     echo "Updating ASG $asg: Desired Capacity: $desired_cap_asg, Minimum Capacity: $min_cap_asg, Maximum Capacity: $max_cap_asg"
                                     // Update the Auto Scaling Group using AWS CLI
                                     sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity $desired_cap_asg --min-size $min_cap_asg --max-size $max_cap_asg", returnStdout: true)
+
+                                    // Wait for EC2 instances to be in running state
+                                    def ec2_instances_running = false
+                                    while (!ec2_instances_running) {
+                                        // Get the instance IDs in the ASG
+                                        def instance_ids = sh (
+                                            script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg --query 'AutoScalingGroups[0].Instances[*].InstanceId' --output text",
+                                            returnStdout: true
+                                        ).trim()
+
+                                        // Check if all instances are in running state
+                                        def instance_states = sh (
+                                            script: "aws ec2 describe-instances --instance-ids $instance_ids --query 'Reservations[*].Instances[*].State.Name' --output text",
+                                            returnStdout: true
+                                        ).trim()
+
+                                        if (instance_states.split().every { it == "running" }) {
+                                            ec2_instances_running = true
+                                            echo "All EC2 instances in ASG $asg are now running."
+                                        } else {
+                                            echo "Waiting for EC2 instances in ASG $asg to be in running state. Retrying in 30 seconds..."
+                                            sleep(30)
+                                        }
+                                    }
                                     break
-                                case "stop":
-                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity 0 --min-size 0  --max-size 0", returnStdout: true).trim()
-                                    break
-                            }
-                        }
-                    } else {
-                        echo "No ASG associated with the selected ECS cluster: $ecs_cluster. Skipping ASG update."
-                    }
