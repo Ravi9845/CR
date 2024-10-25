@@ -1,34 +1,100 @@
-case "start":
-                                    echo "Updating ASG $asg: Desired Capacity: $desired_cap_asg, Minimum Capacity: $min_cap_asg, Maximum Capacity: $max_cap_asg"
-                                    // Update the Auto Scaling Group using AWS CLI
-                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity $desired_cap_asg --min-size $min_cap_asg --max-size $max_cap_asg", returnStdout: true)
+pipeline {
+	agent {
+		label 'ams'
+	}
 
-                                    // Wait for EC2 instances to be in running state
-                                    def ec2_instances_running = false
-                                    while (!ec2_instances_running) {
-                                        // Get the instance IDs in the ASG
-                                        def instance_ids = sh (
-                                            script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg --query 'AutoScalingGroups[0].Instances[*].InstanceId' --output text",
-                                            returnStdout: true
-                                        ).trim()
-
-                                        // Check if all instances are in running state
-                                        def instance_states = sh (
-                                            script: "aws ec2 describe-instances --instance-ids $instance_ids --query 'Reservations[*].Instances[*].State.Name' --output text",
-                                            returnStdout: true
-                                        ).trim()
-
-                                        if (instance_states.split().every { it == "running" }) {
-                                            ec2_instances_running = true
-                                            echo "All EC2 instances in ASG $asg are now running."
-                                        } else {
-                                            echo "Waiting for EC2 instances in ASG $asg to be in running state. Retrying in 30 seconds..."
-                                            sleep(30)
-                                        }
-                                    }
-                                    break
-                                case "stop":
-                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity 0 --min-size 0  --max-size 0", returnStdout: true).trim()
-                                    break
-                            }
-                        }
+    stages {
+		stage('Configuring CodeBuild test12 images') {
+			when {expression { return IMAGE_NAME == 'ALL'}}
+			steps {
+				script {
+					echo 'Copytest12ECRImages'
+					if (Source_Account_STAGE == "test"){
+						SOURCE_ACCOUNT_CRED = "aws_account_id_test"
+					}
+					else{
+						SOURCE_ACCOUNT_CRED = "aws_account_id_${Source_Account_STAGE.toLowerCase()}_${env.Source_Account_Region.replace("-", "_")}"
+					}
+					withCredentials([string(credentialsId: SOURCE_ACCOUNT_CRED , variable: 'SOURCE_ACCOUNT_ID')]) {
+						echo 'Retrieving Source AWS Account ID'
+						env.SOURCE_ACCOUNT_ID = SOURCE_ACCOUNT_ID
+					}
+					if (Source_Account_STAGE == "test1"){
+						TARGET_ACCOUNT_CRED = "aws_account_id_crfs_dev"
+					}else{
+						TARGET_ACCOUNT_CRED = "aws_account_id_${env.STAGE.toLowerCase()}_${env.AWS_DEPLOYMENT_REGION.replace("-", "_")}"
+					}
+					withCredentials([string(credentialsId: TARGET_ACCOUNT_CRED, variable: 'TARGET_ACCOUNT_ID')]) {
+						echo 'Retrieving Target AWS Account ID'
+						env.TARGET_ACCOUNT_ID = TARGET_ACCOUNT_ID
+					}
+					// Loop over selected
+					echo 'Creating image list'
+					def imageList = []
+                    if (params.test12_rest_services) {
+                        imageList.add('test12-1-services')
+                    }
+                    if (params.test12_batch_services) {
+                        imageList.add('test12-2-services')
+                    }
+                    if (params.test12_blaze_rma) {
+                        imageList.add('test12-3-rma')
+                    }
+                    if (params.test12_file_processor) {
+                        imageList.add('test12-4-rpo')
+                    }
+                    if (params.test12_prod_postgres_flyway) {
+                        imageList.add('test12-5-rty-test')
+                    }
+					println "Contents of imageList:"
+					imageList.each { image ->
+						println image
+					}
+                    for (image in imageList) {
+						if (image == 'test12-prod-rty-test') {
+							tag = IMAGE_TAG.replace("-arm64", "")
+						} else {
+							tag = IMAGE_TAG
+						}
+						awsCodeBuild sourceControlType: 'project',
+						credentialsType: 'jenkins',
+						credentialsId: 'jenkins-codebuild-id',
+						envVariables: "[{ImageName, $image}, {ImageTag, $tag}, {FromAwsAccountIdECR, $SOURCE_ACCOUNT_ID}, {ToAwsAccountIdECR, $TARGET_ACCOUNT_ID}, {ToAwsRegion, $AWS_DEPLOYMENT_REGION}, {FromAwsRegion, $Source_Account_Region}]",
+						projectName: 'cicd-codebuild-replicate-ecr',
+						region: "us-east-1"
+					}
+				}
+			}
+		}
+		stage('Configuring CodeBuild') {
+			when {expression { return IMAGE_NAME != 'ALL'}}
+			steps {
+				script {
+					echo "$IMAGE_NAME"
+					if (Source_Account_STAGE == "test"){
+						SOURCE_ACCOUNT_CRED = "aws_account_id_test"
+					}
+					else{
+						SOURCE_ACCOUNT_CRED = "aws_account_id_${Source_Account_STAGE.toLowerCase()}_${env.Source_Account_Region.replace("-", "_")}"
+					}
+					withCredentials([string(credentialsId: SOURCE_ACCOUNT_CRED , variable: 'SOURCE_ACCOUNT_ID')]) {
+						echo 'Retrieving Source AWS Account ID'
+						env.SOURCE_ACCOUNT_ID = SOURCE_ACCOUNT_ID
+					}
+					TARGET_ACCOUNT_CRED = "aws_account_id_${env.STAGE.toLowerCase()}_${env.AWS_DEPLOYMENT_REGION.replace("-", "_")}"
+					withCredentials([string(credentialsId: TARGET_ACCOUNT_CRED, variable: 'TARGET_ACCOUNT_ID')]) {
+						echo 'Retrieving Target AWS Account ID'
+						env.TARGET_ACCOUNT_ID = TARGET_ACCOUNT_ID
+					}
+					echo "Made it this far"
+					awsCodeBuild sourceControlType: 'project',
+					credentialsType: 'jenkins',
+					credentialsId: 'jenkins-codebuild-id',
+					envVariables: "[{ImageName, $IMAGE_NAME}, {ImageTag, $IMAGE_TAG}, {FromAwsAccountIdECR, $SOURCE_ACCOUNT_ID}, {ToAwsAccountIdECR, $TARGET_ACCOUNT_ID}, {ToAwsRegion, $AWS_DEPLOYMENT_REGION}, {FromAwsRegion, $Source_Account_Region}]",
+					projectName: 'cicd-codebuild-replicate-ecr',
+					region: "us-east-1"
+				}
+			}
+		}
+	}
+}
