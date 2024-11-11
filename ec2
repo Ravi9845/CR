@@ -1,14 +1,14 @@
-    stage('Scale ECS Services Based on Cluster') {   
+stage('Scale ECS Services Based on Cluster') {   
         steps {
             script {
                 withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
                     withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                    if (ecs_cluster == "test122-ecs-cluster") {
-                            rds_cluster1 = test1234-dev-cluster
-                    } else if (ecs_cluster == "test12-ecs-cluster") {
-                            rds_cluster1 = test12-rds-cluster
-                    } else if (ecs_cluster == "test1234-dev-test-ecs") {
-                            rds_cluster1 = test1234-dev-cluster
+                    if (ecs_cluster == "test-dev-novus-ecs") {
+                            rds_cluster1 = "test-dev-cluster"
+                    } else if (ecs_cluster == "test1-ecs-cluster" || "test1-t123-cluster") {
+                            rds_cluster1 = "test1-rds-cluster"
+                    } else if (ecs_cluster == "test2-ecs-cluster") {
+                            rds_cluster1 = "test2-rds-cluster"
                     }
                     def db_status = sh(
                         script: "aws rds describe-db-clusters --db-cluster-identifier $rds_cluster1 --query DBClusters[0].Status | xargs",
@@ -43,151 +43,3 @@
                                         case "stop":
                                         echo "No action needed associated with the selected ECS cluster: $rds_cluster1. Skipping rds update."
                                         break
-                                    }
-                    def desired_counts_asg = [:]
-                    if (ecs_cluster == "test122-ecs-cluster") {
-                        desired_counts_asg = [
-                            "test122-ec2-ecs": [desired: 3, min: 3, max: 4]
-                        ]
-                    } else if (ecs_cluster == "test12-ecs-cluster") {
-                        desired_counts_asg = [
-                            "test12-ec2-ecs": [desired: 3, min: 3, max: 4]
-                        ]
-                    } else if (ecs_cluster == "test1234-dev-test-ecs") {
-                        desired_counts_asg = [
-                            "test1234-dev-test-ecs-asg": [desired: 2, min: 1, max: 3]
-                        ]
-                    }
-
-                    if (desired_counts_asg) {
-                        desired_counts_asg.each { asg, count ->
-                            def desired_cap_asg = count.desired
-                            def min_cap_asg = count.min
-                            def max_cap_asg = count.max
-                            // Retrieve suspended processes for the ASG
-                            def suspended_processes = sh(
-                                script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text",
-                                returnStdout: true
-                            ).trim()
-
-                            if (!suspended_processes.isEmpty()) {
-                                echo "Suspended processes found for ASG $asg: $suspended_processes"
-                                // Resume suspended processes
-                                sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg", returnStdout: true)
-                                echo "Resumed suspended processes for ASG $asg"
-                            } else {
-                                echo "No suspended processes found for ASG $asg"
-                            }
-                            switch (op_ecs) {
-                                case "start":
-                                    echo "Updating ASG $asg: Desired Capacity: $desired_cap_asg, Minimum Capacity: $min_cap_asg, Maximum Capacity: $max_cap_asg"
-                                    // Update the Auto Scaling Group using AWS CLI
-                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity $desired_cap_asg --min-size $min_cap_asg --max-size $max_cap_asg", returnStdout: true)
-
-                                    // Wait for EC2 instances to be in running state
-                                    def ec2_instances_running = false
-                                    while (!ec2_instances_running) {
-                                        // Get the instance IDs in the ASG
-                                        def instance_ids = sh (
-                                            script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg --query 'AutoScalingGroups[0].Instances[*].InstanceId' --output text",
-                                            returnStdout: true
-                                        ).trim()
-
-                                        // Check if all instances are in running state
-                                        def instance_states = sh (
-                                            script: "aws ec2 describe-instances --instance-ids $instance_ids --query 'Reservations[*].Instances[*].State.Name' --output text",
-                                            returnStdout: true
-                                        ).trim()
-
-                                        if (instance_states.split().every { it == "running" }) {
-                                            ec2_instances_running = true
-                                            echo "All EC2 instances in ASG $asg are now running."
-                                        } else {
-                                            echo "Waiting for EC2 instances in ASG $asg to be in running state. Retrying in 60 seconds..."
-                                            sleep(60)
-                                        }
-                                    }
-                                    break
-                                case "stop":
-                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity 0 --min-size 0  --max-size 0", returnStdout: true).trim()
-                                    break
-                            }
-                        }
-                    } else {
-                        echo "No ASG associated with the selected ECS cluster: $ecs_cluster. Skipping ASG update."
-                    }                       
-                        // Define the desired counts for services based on cluster
-                        def desired_counts = [:]
-                        if (ecs_cluster == "callout-test1234") {
-                            desired_counts = [
-                                "callout-appservice": "2"
-                            ]
-                        } else if (ecs_cluster == "test12-ecs-cluster") {
-                            desired_counts = [
-                                "test12-23": "2",
-                                "test12-45": "1",
-                                "test12-67": "1",
-                                "test12-89": "2"
-                            ]
-                        } else if (ecs_cluster == "test122-ecs-cluster") {
-                            desired_counts = [
-                                "test122-23": "2",
-                                "test122-234": "1",
-                                "test122-21": "1",
-                                "test122-89": "2"
-                            ]
-                        } else if (ecs_cluster == "test1234-dev-test-ecs") {
-                            desired_counts = [
-                                "test1234-configuration": "2",
-                                "test1234-34-processing": "2",
-                                "test1234-4567": "2"
-                            ]           
-                        // Check the operation type (start or stop)
-                        def operationType = op_ecs
-                        echo "Operation Type: ${operationType}"
-    
-                        // Iterate over the services in the desired_counts map and update their desired count
-                        desired_counts.each { service, count ->
-                            // Determine the desired count based on operation type
-                            def desired_count = operationType == 'start' ? count : "0" // Use the desired count when starting, or set to zero when stopping
-    
-                            echo "Scaling service ${service} to desired count: ${desired_count}"
-    
-                            // Execute the scaling command
-                            def scale_service = sh (
-                                script: "aws ecs update-service --cluster $ecs_cluster --service $service --desired-count $desired_count",
-                                returnStdout: true
-                            ).trim()
-    
-                            echo "Scaled service $service in cluster $ecs_cluster to desired count $desired_count"
-                        }
-                    }
-                }
-              }
-            } 
-         }
-hudson.remoting.ProxyException: groovy.lang.MissingPropertyException: No such property: test122 for class: WorkflowScript
-Possible solutions: class
-	at org.codehaus.groovy.runtime.ScriptBytecodeAdapter.unwrap(ScriptBytecodeAdapter.java:66)
-	at org.codehaus.groovy.runtime.ScriptBytecodeAdapter.getProperty(ScriptBytecodeAdapter.java:471)
-	at org.kohsuke.groovy.sandbox.impl.Checker$7.call(Checker.java:355)
-	at org.kohsuke.groovy.sandbox.GroovyInterceptor.onGetProperty(GroovyInterceptor.java:68)
-	at org.jenkinsci.plugins.scriptsecurity.sandbox.groovy.SandboxInterceptor.onGetProperty(SandboxInterceptor.java:355)
-	at org.kohsuke.groovy.sandbox.impl.Checker$7.call(Checker.java:353)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:357)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
-	at com.cloudbees.groovy.cps.sandbox.SandboxInvoker.getProperty(SandboxInvoker.java:29)
-	at com.cloudbees.groovy.cps.impl.PropertyAccessBlock.rawGet(PropertyAccessBlock.java:20)
-	at WorkflowScript.run(WorkflowScript:340)
-	at ___cps.transform___(Native Method)
-	at com.cloudbees.groovy.cps.impl.PropertyishBlock$ContinuationImpl.get(PropertyishBlock.java:74)
-	at com.cloudbees.groovy.cps.LValueBlock$GetAdapter.receive(LValueBlock.java:30)
-	at com.cloudbees.groovy.cps.impl.PropertyishBlock$ContinuationImpl.fixName(PropertyishBlock.java:66)
-	at jdk.internal.reflect.GeneratedMethodAccessor182.invoke(Unknown Source)
-	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
-	at com.cloudbees.groovy.cps.impl.ContinuationPtr$ContinuationImpl.receive(ContinuationPtr.java:72)
