@@ -1,107 +1,17 @@
-pipeline {
-  agent any
-  parameters {
-    string(name: 'ACTION', defaultValue: 'start', description: 'Action to perform: start or stop')
-  }
-  stages {
-    stage('Scale Up or Down ECS Services') {
-      steps {
-        script {
-          withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+ def asg_name = sh(
+                            script: "aws eks describe-nodegroup --cluster-name $eks_cluster --nodegroup-name $eks_nodegroup --query 'nodegroup.resources.autoScalingGroups[0].name' --output text",
+                            returnStdout: true
+                        ).trim()
 
-              def action = params.ACTION.toLowerCase()
+                        // Retrieve suspended processes for the ASG
+                        def suspended_processes = sh(
+                            script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg_name --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text",
+                            returnStdout: true
+                        ).trim()
 
-              if (action != 'start' && action != 'stop') {
-                error('Invalid action provided. Please specify "start" or "stop".')
-              }
-
-              // Get list of ECS Clusters
-              def list_clusters_response = sh (
-                script: "aws ecs list-clusters --query clusterArns | xargs",
-                returnStdout: true
-              ).trim()
-
-              def clusters = list_clusters_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
-
-              // Loop through each ECS cluster to get the list of services
-              clusters.each { cluster ->
-                def list_services_response = sh (
-                  script: "aws ecs list-services --cluster $cluster --query serviceArns | xargs",
-                  returnStdout: true
-                ).trim()
-
-                echo "$list_services_response"
-
-                // Puts output in array format
-                def services = list_services_response.replace(' ', '').replaceAll("[\\[\\](){}]", '').split(",")
-
-                // Separate batch and non-batch services
-                def batch_services = []
-                def non_batch_services = []
-
-                services.each { service ->
-                  if (service.contains("Batch")) {
-                    batch_services.add(service)
-                  } else {
-                    non_batch_services.add(service)
-                  }
-                }
-
-                // Process batch services
-                batch_services.each { service ->
-                  def desired_count = ""
-                  
-                  if (action == 'start') {
-                    if (service.contains("p")) { 
-                      desired_count = "2"
-                    } else if (service.contains("per")) { 
-                      desired_count = "5"
-                    } else {
-                      desired_count = "2"
-                    }
-                  } else if (action == 'stop') {
-                    desired_count = "0"
-                  }
-
-                  def scale_services = sh (
-                    script: "aws ecs update-service --cluster $cluster --service $service --desired-count $desired_count | xargs -0",
-                    returnStdout: true
-                  ).trim()
-                  echo "Scaled batch service $service to $desired_count"
-                  if (action == 'start') {
-                    echo "60 seconds wait for batch service to stabilize..."
-                    sleep(60)
-                  }
-                }
-
-                // Process non-batch services
-                non_batch_services.each { service ->
-                  def desired_count = ""
-
-                  if (action == 'start') {
-                    if (service.contains("bo")) {
-                      desired_count = "1"
-                    } else if (service.contains("perf-BlazeRMA")) {
-                      desired_count = "1"
-                    } else {
-                      desired_count = "2"
-                    }
-                  } else if (action == 'stop') {
-                    desired_count = "0"
-                  }
-
-                  def scale_services = sh (
-                    script: "aws ecs update-service --cluster $cluster --service $service --desired-count $desired_count | xargs -0",
-                    returnStdout: true
-                  ).trim()
-                  echo "Scaled non-batch service $service to $desired_count"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
+                        if (!suspended_processes.isEmpty()) {
+                            echo "Suspended processes found for ASG ${asg_name}: ${suspended_processes}"
+                            // Optionally, resume processes here if necessary
+                        } else {
+                            echo "No suspended processes found for ASG ${asg_name}"
+                        }
