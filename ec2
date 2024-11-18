@@ -1,178 +1,62 @@
-   stage('Scale EKS Node Group') {
-        stert {
-            script {
-                withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-                    withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                    def desired_counts_asg = [:]
-                    if (ecs_cluster == "test1-smarts-test-subnet-rt34") {
-                        desired_counts_eks_asg = [
-                            "eks-test1-345": [desired: 3, min: 3, max: 4]
-                        ]
-                    }  else if (ecs_cluster == "test-dev-test13-ecs") {
-                        desired_counts_asg = [
-                            "test-dev-test13-ecs-asg": [desired: 2, min: 1, max: 3]
-                        ]
-                    }
-                    if (desired_counts_eks_asg) {
-                        desired_counts_eks_asg.each { asg, count ->
-                            def desired_cap_asg = count.desired
-                            def min_cap_asg = count.min
-                            def max_cap_asg = count.max
-                            // Retrieve suspended processes for the ASG
-                            def suspended_processes = sh(
-                                script: "aws autoscaling describe-auto-scaling-grourt --auto-scaling-group-names $asg --query 'AutoScalingGrourt[0].SuspendedProcesses[*].ProcessName' --output text",
-                                returnStdout: true
-                            ).trim()
+try {
+                                // Mapping for desired and minimum capacities
+                                def capacityMap = [
+                                  "test2": [desired: 1, min: 1, max: 2],
+                                  "test": [desired: 1, min: 1, max: 2],
+                                  "test1": [desired: 1, min: 1, max: 2], 
+                                ]
+                                
+                                // Check if the ASG name exists in the capacityMap
+                                if (!capacityMap.containsKey(asg_name1)) {
+                                    error "Auto Scaling Group '$asg_name1' not found in the capacity map."
+                                }
 
-                            if (!suspended_processes.isEmpty()) {
-                                echo "Suspended processes found for ASG $asg: $suspended_processes"
-                                // Resume suspended processes
-                                sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg", returnStdout: true)
-                                echo "Resumed suspended processes for ASG $asg"
-                            } else {
-                                echo "No suspended processes found for ASG $asg"
+                                // Retrieve desired , minimum and maximum capacities
+                                def desired_cap = capacityMap[asg_name1].desired
+                                def min_cap = capacityMap[asg_name1].min
+                                def max_cap = capacityMap[asg_name1].max
+                                
+                                echo "Auto Scaling Group: $asg_name1, Desired Capacity: $desired_cap, Minimum Capacity: $min_cap, maximun Capacity: $max_cap"
+
+                                // Check for suspended processes in the Auto Scaling Group
+                                def suspended_processes = sh(script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg_name1 --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text", returnStdout: true).trim()
+
+                                if (!suspended_processes.isEmpty()) {
+                                    echo "Suspended processes found for ASG $asg_name1: $suspended_processes"
+                                    // Resume suspended processes
+                                    sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg_name1", returnStdout: true).trim()
+                                    echo "Resumed suspended processes for ASG $asg_name1"
+                                } else {
+                                    echo "No suspended processes found for ASG $asg_name1"
+                                }
+
+                                // Scale up or down the Auto Scaling Group based on the operation
+                                switch (op_asg) {
+                                    case "Start":
+                                        echo "Updating desired capacity for ASG $asg_name1 to $desired_cap $min_cap $max_cap"
+                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity $desired_cap --min-size $min_cap --max-size $max_cap", returnStdout: true).trim()
+                                        echo "ASG $asg_name1 scaled to desired capacity of $desired_cap"
+
+                                        // Wait for instances to launch and check their state
+                                        def instance_state = sh(script: "aws autoscaling describe-auto-scaling-instances --query 'AutoScalingInstances[?AutoScalingGroupName==\"$asg_name1\"].LifecycleState' --output text", returnStdout: true).trim()
+                                        echo "Instance states for ASG $asg_name1: $instance_state"
+                                        break;
+
+                                    case "Stop":
+                                        echo "Stopping all instances in ASG $asg_name1 by setting desired capacity to 0"
+                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity 0 --min-size 0  --max-size 0", returnStdout: true).trim()
+                                        echo "ASG $asg_name1 scaled down to desired capacity of 0"
+                                        break;
+
+                                    default:
+                                        echo "No valid operation specified"
+                                        break;
+                                }
+                            } catch (err) {
+                                echo "ERROR CAUGHT: $err"
                             }
-                            switch (op_eks) {
-                                case "start":
-                                    echo "Updating ASG $asg: Desired Capacity: $desired_cap_asg, Minimum Capacity: $min_cap_asg, Maximum Capacity: $max_cap_asg"
-                                    // Update the Auto Scaling Group using AWS CLI
-                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity $desired_cap_asg --min-size $min_cap_asg --max-size $max_cap_asg", returnStdout: true)
-
-                                    // Wait for EC2 instances to be in running state
-                                    def ec2_instances_running = false
-                                    while (!ec2_instances_running) {
-                                        // Get the instance IDs in the ASG
-                                        def instance_ids = sh (
-                                            script: "aws autoscaling describe-auto-scaling-grourt --auto-scaling-group-names $asg --query 'AutoScalingGrourt[0].Instances[*].InstanceId' --output text",
-                                            returnStdout: true
-                                        ).trim()
-
-                                        // Check if all instances are in running state
-                                        def instance_states = sh (
-                                            script: "aws ec2 describe-instances --instance-ids $instance_ids --query 'Reservations[*].Instances[*].State.Name' --output text",
-                                            returnStdout: true
-                                        ).trim()
-
-                                        if (instance_states.split().every { it == "running" }) {
-                                            ec2_instances_running = true
-                                            echo "All EC2 instances in ASG $asg are now running."
-                                        } else {
-                                            echo "Waiting for EC2 instances in ASG $asg to be in running state. Retrying in 60 seconds..."
-                                            sleep(60)
-                                        }
-                                    }
-                                    break
-                                case "stop":
-                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg --desired-capacity 0 --min-size 0  --max-size 1", returnStdout: true).trim()
-                                    break
-                            }
-                        }
-                    } else {
-                        echo "No ASG associated with the selected ECS cluster: $ecs_cluster. Skipping ASG update."
-                    }                        
-                        def desired_capacities = [
-                        "test1-smarts-test-subnet-rt34": "3",
-                        "test1-smarts-nodegroup-rt4": "1",
-                        "test1-smarts-nodegroup-rt34": "1"
-                        ]
-    
-                        // Check the operation type (start or stop)
-                        def operationType = op_eks
-                        echo "Operation Type: ${operationType}"
-                        // Exit the stage early if operation type is none
-                        if (operationType == 'none') {
-                            echo "operationType is 'none', skipping the scaling step."
-                            return
-                        }
-    
-                        // Get the desired capacity for the selected node group
-                        def selected_capacity = desired_capacities[eks_nodegroup]
-    
-                        if (selected_capacity != null) {
-                            // Initialize scaling parameters
-                            def min_size, max_size, desired_size
-    
-                            // Use switch to determine scaling parameters based on operation type
-                            switch (operationType) {
-                                case 'start':
-                                    min_size = selected_capacity
-                                    max_size = selected_capacity
-                                    desired_size = selected_capacity
-                                    break
-                                case 'stop':
-                                    min_size = "0" // Keep minSize as 1
-                                    max_size = "1" // Limit maxSize to 1 
-                                    desired_size = "0" // Set desiredSize to 0 to stop
-                                    break
-                                default:
-                                    error("Invalid operation type: ${operationType}")
-                            }
-    
-                            echo "Scaling node group ${eks_nodegroup} to desired capacity: ${desired_size} with min size: ${min_size} and max size: ${max_size}"
-    
-                            // Execute the scaling command
-                            def scale_nodegroup = sh (
-                                script: "aws eks update-nodegroup-config --cluster-name $eks_cluster --nodegroup-name $eks_nodegroup --scaling-config minSize=$min_size,maxSize=$max_size,desiredSize=$desired_size",
-                                returnStdout: true
-                            ).trim()
-    
-                            echo "Scaled node group $eks_nodegroup to desired capacity $desired_size with min size $min_size and max size $max_size"
-                        } else {
-                            echo "Node group ${eks_nodegroup} not found"
                         }
                     }
                 }
             }
-          }
         }
-      }
-    }
-hudson.remoting.ProxyException: groovy.lang.MissingPropertyException: No such property: desired_counts_eks_asg for class: WorkflowScript
-	at org.codehaus.groovy.runtime.ScriptBytecodeAdapter.unwrap(ScriptBytecodeAdapter.java:66)
-	at org.codehaus.groovy.runtime.ScriptBytecodeAdapter.getProperty(ScriptBytecodeAdapter.java:471)
-	at org.kohsuke.groovy.sandbox.impl.Checker$7.call(Checker.java:355)
-	at org.kohsuke.groovy.sandbox.GroovyInterceptor.onGetProperty(GroovyInterceptor.java:68)
-	at org.jenkinsci.plugins.scriptsecurity.sandbox.groovy.SandboxInterceptor.onGetProperty(SandboxInterceptor.java:355)
-	at org.kohsuke.groovy.sandbox.impl.Checker$7.call(Checker.java:353)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:357)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
-	at org.kohsuke.groovy.sandbox.impl.Checker.checkedGetProperty(Checker.java:333)
-	at com.cloudbees.groovy.cps.sandbox.SandboxInvoker.getProperty(SandboxInvoker.java:29)
-	at com.cloudbees.groovy.cps.impl.PropertyAccessBlock.rawGet(PropertyAccessBlock.java:20)
-	at WorkflowScript.run(WorkflowScript:588)
-	at ___cps.transform___(Native Method)
-	at com.cloudbees.groovy.cps.impl.PropertyishBlock$ContinuationImpl.get(PropertyishBlock.java:74)
-	at com.cloudbees.groovy.cps.LValueBlock$GetAdapter.receive(LValueBlock.java:30)
-	at com.cloudbees.groovy.cps.impl.PropertyishBlock$ContinuationImpl.fixName(PropertyishBlock.java:66)
-	at jdk.internal.reflect.GeneratedMethodAccessor182.invoke(Unknown Source)
-	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
-	at com.cloudbees.groovy.cps.impl.ContinuationPtr$ContinuationImpl.receive(ContinuationPtr.java:72)
-	at com.cloudbees.groovy.cps.impl.ConstantBlock.eval(ConstantBlock.java:21)
-	at com.cloudbees.groovy.cps.Next.step(Next.java:83)
-	at com.cloudbees.groovy.cps.Continuable$1.call(Continuable.java:174)
-	at com.cloudbees.groovy.cps.Continuable$1.call(Continuable.java:163)
-	at org.codehaus.groovy.runtime.GroovyCategorySupport$ThreadCategoryInfo.use(GroovyCategorySupport.java:136)
-	at org.codehaus.groovy.runtime.GroovyCategorySupport.use(GroovyCategorySupport.java:275)
-	at com.cloudbees.groovy.cps.Continuable.run0(Continuable.java:163)
-	at org.jenkinsci.plugins.workflow.cps.SandboxContinuable.access$001(SandboxContinuable.java:18)
-	at org.jenkinsci.plugins.workflow.cps.SandboxContinuable.run0(SandboxContinuable.java:51)
-	at org.jenkinsci.plugins.workflow.cps.CpsThread.runNextChunk(CpsThread.java:185)
-	at org.jenkinsci.plugins.workflow.cps.CpsThreadGroup.run(CpsThreadGroup.java:403)
-	at org.jenkinsci.plugins.workflow.cps.CpsThreadGroup.access$400(CpsThreadGroup.java:97)
-	at org.jenkinsci.plugins.workflow.cps.CpsThreadGroup$2.call(CpsThreadGroup.java:315)
-	at org.jenkinsci.plugins.workflow.cps.CpsThreadGroup$2.call(CpsThreadGroup.java:279)
-	at org.jenkinsci.plugins.workflow.cps.CpsVmExecutorService$2.call(CpsVmExecutorService.java:67)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
-	at hudson.remoting.SingleLaneExecutorService$1.run(SingleLaneExecutorService.java:139)
-	at jenkins.util.ContextResettingExecutorService$1.run(ContextResettingExecutorService.java:28)
-	at jenkins.security.ImpersonatingExecutorService$1.run(ImpersonatingExecutorService.java:68)
-	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
-	at java.base/java.lang.Thread.run(Thread.java:829)
-Finished: FAILURE
