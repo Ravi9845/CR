@@ -1,65 +1,69 @@
 try {
-                                // Mapping for desired and minimum capacities
-                                def capacityMap = [
-                                  "test2": [desired: 1, min: 1, max: 2],
-                                  "test": [desired: 1, min: 1, max: 2],
-                                  "test1": [desired: 1, min: 1, max: 2], 
-                                ]
-                                
-                                // Check if the ASG name exists in the capacityMap
-                                if (!capacityMap.containsKey(asg_name1)) {
-                                    error "Auto Scaling Group '$asg_name1' not found in the capacity map."
-                                }
+    // Mapping for desired and minimum capacities
+    def capacityMap = [
+        "test2": [desired: 1, min: 1, max: 2],
+        "test": [desired: 1, min: 1, max: 2],
+        "test1": [desired: 1, min: 1, max: 2]
+    ]
 
-                                // Retrieve desired , minimum and maximum capacities
-                                def desired_cap = capacityMap[asg_name1].desired
-                                def min_cap = capacityMap[asg_name1].min
-                                def max_cap = capacityMap[asg_name1].max
-                                
-                                echo "Auto Scaling Group: $asg_name1, Desired Capacity: $desired_cap, Minimum Capacity: $min_cap, maximun Capacity: $max_cap"
+    // Check if the ASG name exists in the capacityMap
+    if (!capacityMap.containsKey(asg_name1)) {
+        error "Auto Scaling Group '$asg_name1' not found in the capacity map."
+    }
 
-                                // Check for suspended processes in the Auto Scaling Group
-                                def suspended_processes = sh(script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg_name1 --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text", returnStdout: true).trim()
+    // Retrieve desired, minimum, and maximum capacities
+    def desired_cap = capacityMap[asg_name1].desired
+    def min_cap = capacityMap[asg_name1].min
+    def max_cap = capacityMap[asg_name1].max
 
-                                if (!suspended_processes.isEmpty()) {
-                                    echo "Suspended processes found for ASG $asg_name1: $suspended_processes"
-                                    // Resume suspended processes
-                                    sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg_name1", returnStdout: true).trim()
-                                    echo "Resumed suspended processes for ASG $asg_name1"
-                                } else {
-                                    echo "No suspended processes found for ASG $asg_name1"
-                                }
+    echo "Auto Scaling Group: $asg_name1, Desired Capacity: $desired_cap, Minimum Capacity: $min_cap, Maximum Capacity: $max_cap"
 
-                                // Scale up or down the Auto Scaling Group based on the operation
-                                switch (op_asg) {
-                                    case "Start":
-                                        echo "Updating desired capacity for ASG $asg_name1 to $desired_cap $min_cap $max_cap"
-                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity $desired_cap --min-size $min_cap --max-size $max_cap", returnStdout: true).trim()
-                                        echo "ASG $asg_name1 scaled to desired capacity of $desired_cap"
+    // Check for suspended processes in the Auto Scaling Group
+    def suspended_processes = sh(script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg_name1 --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text", returnStdout: true).trim()
 
-                                        // Wait for instances to launch and check their state
-                                        def instance_state = sh(script: "aws autoscaling describe-auto-scaling-instances --query 'AutoScalingInstances[?AutoScalingGroupName==\"$asg_name1\"].LifecycleState' --output text", returnStdout: true).trim()
-                                        echo "Instance states for ASG $asg_name1: $instance_state"
-                                        break;
+    if (!suspended_processes.isEmpty()) {
+        echo "Suspended processes found for ASG $asg_name1: $suspended_processes"
+        // Resume suspended processes
+        sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg_name1", returnStdout: true).trim()
+        echo "Resumed suspended processes for ASG $asg_name1"
+    } else {
+        echo "No suspended processes found for ASG $asg_name1"
+    }
 
-                                    case "Stop":
-                                        echo "Stopping all instances in ASG $asg_name1 by setting desired capacity to 0"
-                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity 0 --min-size 0  --max-size 0", returnStdout: true).trim()
-                                        echo "ASG $asg_name1 scaled down to desired capacity of 0"
-                                        break;
-
-                                    default:
-                                        echo "No valid operation specified"
-                                        break;
-                                }
-                            } catch (err) {
-                                echo "ERROR CAUGHT: $err"
-                            }
-                        }
-                    }
-                }
+    // Scale up or down the Auto Scaling Group based on the operation
+    switch (op_asg) {
+        case "Start":
+            if (asg_name1 == "test2") {
+                echo "Resuming instance termination process for ASG $asg_name1"
+                sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg_name1 --scaling-processes Terminate", returnStdout: true).trim()
+                echo "Termination process resumed for ASG $asg_name1"
             }
-        }
 
-When ever test2 autosacling group scaling down to 0 and again I make scaling to 1 it is terminating stopped instance and it is creating new one at that time the .kube/config file it is deleting. It shouldn't not be deleted How to fix it
- 
+            echo "Scaling up ASG $asg_name1 to desired capacity of $desired_cap"
+            sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity $desired_cap --min-size $min_cap --max-size $max_cap", returnStdout: true).trim()
+            echo "ASG $asg_name1 scaled to desired capacity of $desired_cap"
+
+            // Wait for instances to launch and check their state
+            def instance_state = sh(script: "aws autoscaling describe-auto-scaling-instances --query 'AutoScalingInstances[?AutoScalingGroupName==\"$asg_name1\"].LifecycleState' --output text", returnStdout: true).trim()
+            echo "Instance states for ASG $asg_name1: $instance_state"
+            break
+
+        case "Stop":
+            if (asg_name1 == "test2") {
+                echo "Suspending instance termination process for ASG $asg_name1"
+                sh(script: "aws autoscaling suspend-processes --auto-scaling-group-name $asg_name1 --scaling-processes Terminate", returnStdout: true).trim()
+                echo "Termination process suspended for ASG $asg_name1"
+            }
+
+            echo "Stopping instances in ASG $asg_name1 by setting desired capacity to 0"
+            sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity 0 --min-size 0 --max-size 0", returnStdout: true).trim()
+            echo "ASG $asg_name1 scaled down to desired capacity of 0"
+            break
+
+        default:
+            echo "No valid operation specified"
+            break
+    }
+} catch (err) {
+    echo "ERROR CAUGHT: $err"
+}
