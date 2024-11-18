@@ -60,3 +60,6 @@ try {
                 }
             }
         }
+
+When ever test2 autosacling group scaling down to 0 and again I make scaling to 1 it is terminating stopped instance and it is creating new one at that time the .kube/config file it is deleting. It shouldn't not be deleted How to fix it
+ 
