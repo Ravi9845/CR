@@ -1,125 +1,60 @@
-pipeline {
-    agent any
-    environment {
-        CICD_REGION = 'us-west-2'  // Example value
-        CICD_ACCOUNT_ID = '123456789012'  // Example value
-        CICD_REGION_ROLE = 'CICDRole'  // Example value
-        AWS_DEPLOYMENT_REGION = 'us-west-2'  // Example value
-        AWS_ACCOUNT_ID = '123456789012'  // Example value
-        AWS_IAM_ROLE_NAME = 'DeploymentRole'  // Example value
-        rds_cluster = 'your-rds-cluster-identifier'  // Example RDS cluster identifier
-        op_ecs = 'start'  // Operation type: 'start' or 'stop'
-    }
-
-    stages {
-        stage('Manage RDS cluster') {
-            steps {
-                script {
-                    withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-                        withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                            if (rds_cluster != "none") {
-                                try {
-                                    // Check the current status of the RDS cluster
-                                    def db_status = sh(
-                                        script: "aws rds describe-db-clusters --db-cluster-identifier $rds_cluster --query DBClusters[0].Status | xargs",
-                                        returnStdout: true
-                                    ).trim()
-
-                                    // Determine action based on desired operation and current status
-                                    switch (op_ecs.toLowerCase()) {
-                                        case "start":
-                                            if (db_status == "available") {
-                                                echo "RDS cluster $rds_cluster is already available. No action needed."
-                                                rds_operation_success = true  // Set flag to true since no action was needed
-                                            } else {
-                                                echo "Starting RDS cluster as ECS service is set to start."
-                                                def db_start = sh(
-                                                    script: "aws rds start-db-cluster --db-cluster-identifier $rds_cluster | xargs",
-                                                    returnStdout: true
-                                                ).trim()
-                                                echo "RDS cluster $rds_cluster is starting..."
-
-                                                // Wait for the RDS cluster to become available
-                                                while (db_status != "available") {
-                                                    echo "RDS Cluster not available. Waiting 60 seconds..."
-                                                    sleep(60)
-                                                    db_status = sh(
-                                                        script: "aws rds describe-db-clusters --db-cluster-identifier $rds_cluster --query DBClusters[0].Status | xargs",
-                                                        returnStdout: true
-                                                    ).trim()
-                                                }
-                                                echo "RDS cluster $rds_cluster is now available."
-                                                rds_operation_success = true  // Set flag to true when RDS is started successfully
-                                            }
-                                            break
-
-                                        case "stop":
-                                            if (db_status == "stopped") {
-                                                echo "RDS cluster $rds_cluster is already stopped. No action needed."
-                                                rds_operation_success = true  // Set flag to true since no action was needed
-                                            } else {
-                                                echo "Stopping RDS cluster as ECS service is set to stop."
-                                                def db_stop = sh(
-                                                    script: "aws rds stop-db-cluster --db-cluster-identifier $rds_cluster | xargs",
-                                                    returnStdout: true
-                                                ).trim()
-                                                echo "RDS cluster $rds_cluster is stopping..."
-                                                rds_operation_success = true  // Set flag to true when RDS is stopped successfully
-                                            }
-                                            break
-
-                                        default:
-                                            echo "No valid operation specified for RDS cluster."
-                                            rds_operation_success = false
-                                    }
-                                } catch (err) {
-                                    echo "Failed to manage RDS cluster: $err"
-                                    error("Exiting pipeline due to RDS cluster management failure.")
-                                }
-                            } else {
-                                echo "No RDS cluster specified."
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Scale ECS Services Based on Cluster') {
-            when {
-                expression { rds_operation_success }  // Execute this stage only if RDS operation was successful
-            }
-            steps {
-                script {
-                    // Check if ECS operation is 'start' or 'stop'
-                    if (op_ecs.toLowerCase() == "start" || op_ecs.toLowerCase() == "stop") {
-                        echo "Proceeding with ECS scaling operation: $op_ecs"
-
-                        withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-                            withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                                // Define the desired counts for services based on cluster
-                                def desired_counts = [:]
-                                if (ecs_cluster == "cluster1") {
-                                    desired_counts = [
-                                        "test": "1",
-                                        "bd": "2",
-                                        "rt": "3",
-                                        "ft": "4"
-                                    ]
-                                }
-
-                                // Iterate over the services in the desired_counts map and update their desired count
-                                desired_counts.each { service, count ->
-                                    def desired_count = (op_ecs.toLowerCase() == 'start') ? count : "0"
-
-                                    echo "Scaling service ${service} to desired count: ${desired_count}"
-                                    sh(script: "aws ecs update-service --cluster $ecs_cluster --service $service --desired-count $desired_count")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  annotations:
+    meta.helm.sh/release-name: test-rc1-one2-kt
+    meta.helm.sh/release-namespace: test-rc1
+  creationTimestamp: "2024-05-11T06:51:58Z"
+  labels:
+    app: test
+    app.kubernetes.io/managed-by: Helm
+    chart: test-9
+    heritage: Helm
+    release: test-rc1-one2-kt
+  name: test-rc1-one2-kt-one2-hpa
+  namespace: test-rc1
+  resourceVersion: "1232"
+  uid: 123
+spec:
+  maxReplicas: 4
+  metrics:
+  - resource:
+      name: cpu
+      target:
+        averageUtilization: 80
+        type: Utilization
+    type: Resource
+  minReplicas: 2
+scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: test-rc1-one2-kt-one2
+status:
+  conditions:
+  - lastTransitionTime: "2024-11-15T13:24:24Z"
+    message: recommended size matches current size
+    reason: ReadyForNewScale
+    status: "True"
+    type: AbleToScale
+  - lastTransitionTime: "2024-11-18T08:03:22Z"
+    message: the HPA was able to successfully calculate a replica count from cpu resource
+      utilization (percentage of request)
+    reason: ValidMetricFound
+    status: "True"
+    type: ScalingActive
+  - lastTransitionTime: "2024-11-17T09:18:05Z"
+    message: the desired replica count is less than the minimum replica count
+    reason: TooFewReplicas
+    status: "True"
+    type: ScalingLimited
+  currentMetrics:
+  - resource:
+      current:
+        averageUtilization: 0
+        averageValue: 11m
+      name: cpu
+    type: Resource
+  currentReplicas: 2
+  desiredReplicas: 2
+lastScaleTime: "2024-11-04T16:51:49Z"
+                                                                                                                                                         1,1           Top
