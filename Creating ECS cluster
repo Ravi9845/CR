@@ -1,42 +1,36 @@
-    case "Stop":
-                                        echo "Stopping all instances in ASG ${asg_name1}"
-                                        
-                                        // Enable instance protection first
-                                        sh(script: "aws autoscaling set-instance-protection --auto-scaling-group-name ${asg_name1} --protected-from-scale-in", returnStdout: true)
-                                        
-                                        // Get instance IDs from the ASG
-                                        def instance_ids = sh(
-                                            script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-name ${asg_name1} --query 'AutoScalingGroups[0].Instances[*].InstanceId' --output text",
-                                            returnStdout: true
-                                        ).trim()
-                                        
-                                        if (instance_ids) {
-                                            // Detach instances from ASG without terminating them
-                                            sh(script: """
-                                                aws autoscaling detach-instances \
-                                                --auto-scaling-group-name ${asg_name1} \
-                                                --instance-ids ${instance_ids} \
-                                                --should-decrement-desired-capacity
-                                            """)
-                                            
-                                            // Stop the detached instances
-                                            sh(script: "aws ec2 stop-instances --instance-ids ${instance_ids}")
-                                            
-                                            echo "Instances detached and stopped: ${instance_ids}"
-                                        }
-                                        
-                                        // Update ASG capacity to 0
-                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name ${asg_name1} --desired-capacity 0 --min-size 0 --max-size 0", returnStdout: true)
-                                        echo "ASG ${asg_name1} scaled down to desired capacity of 0"
-                                        break;
-usage: aws [options] <command> <subcommand> [<subcommand> ...] [parameters]
-To see help text, you can run:
+case "Stop":
+    echo "Stopping all instances in ASG ${asg_name1}"
+    
+    // Enable instance protection first
+    sh(script: "aws autoscaling set-instance-protection --auto-scaling-group-name ${asg_name1} --protected-from-scale-in", returnStdout: true)
+    
+    // Get instance IDs from the ASG
+    def instance_ids = sh(
+        script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-name ${asg_name1} --query 'AutoScalingGroups[0].Instances[*].InstanceId' --output text",
+        returnStdout: true
+    ).trim()
+    
+    // Ensure instance_ids is not empty
+    if (instance_ids) {
+        def instance_ids_list = instance_ids.split("\\s+") // Ensure it splits correctly into a list of IDs
 
-  aws help
-  aws <command> help
-  aws <command> <subcommand> help
-
-aws: error: the following arguments are required: --instance-ids
-
-[Pipeline] echo
-ERROR CAUGHT: hudson.AbortException: script returned exit code 252
+        // Detach instances from ASG without terminating them
+        sh(script: """
+            aws autoscaling detach-instances \
+            --auto-scaling-group-name ${asg_name1} \
+            --instance-ids ${instance_ids_list.join(' ')} \
+            --should-decrement-desired-capacity
+        """)
+        
+        // Stop the detached instances
+        sh(script: "aws ec2 stop-instances --instance-ids ${instance_ids_list.join(' ')}")
+        
+        echo "Instances detached and stopped: ${instance_ids_list.join(', ')}"
+    } else {
+        echo "No running instances found in ASG ${asg_name1}."
+    }
+    
+    // Update ASG capacity to 0
+    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name ${asg_name1} --desired-capacity 0 --min-size 0 --max-size 0", returnStdout: true)
+    echo "ASG ${asg_name1} scaled down to desired capacity of 0"
+    break;
