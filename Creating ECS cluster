@@ -1,55 +1,67 @@
-#
-##########################################################################################
-#
-#    This material is the confidential, proprietary, unpublished property
-#    of Jonas Collections & Recovery.  Receipt or possession of this material
-#    does not convey rights to divulge, reproduce, use, or allow others
-#    to use it without the specific written authorization of Jonas Collections & Recovery
-#    and use must conform strictly to the license agreement.
-#
-#    Copyright (c) 2021 Jonas Collections & Recovery.  All rights reserved.
-#    Version-1.0.0
-#########################################################################################
-#
-AWSTemplateFormatVersion: 2010-09-09
-Description: CloudFormation template for creating BpoCloud Ecs-Cluster
-Parameters:
-  crsnamespace:
-    Type: String
-    Description: The Name of the cluster should have the name space namespace and application name.
+        stage('Scale Up ASG') {
+            steps {
+                script {
+                    withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+                        withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+                            try {
+                                // Mapping for desired and minimum capacities
+                                def capacityMap = [
+                                    "test3": [desired: 1, min: 1, max: 2],
+                                    "test2": [desired: 1, min: 1, max: 2],
+                                    "test1": [desired: 1, min: 1, max: 1]
+                                ]
+                                
+                                // Check if the ASG name exists in the capacityMap
+                                if (!capacityMap.containsKey(asg_name1)) {
+                                    error "Auto Scaling Group '$asg_name1' not found in the capacity map."
+                                }
 
-  crsappname:
-    Type: String
-    Description: The Name of the cluster should have the application name.
+                                // Retrieve desired , minimum and maximum capacities
+                                def desired_cap = capacityMap[asg_name1].desired
+                                def min_cap = capacityMap[asg_name1].min
+                                def max_cap = capacityMap[asg_name1].max
+                                
+                                echo "Auto Scaling Group: $asg_name1, Desired Capacity: $desired_cap, Minimum Capacity: $min_cap, maximun Capacity: $max_cap"
 
-  crsenvironment:
-    Type: String
-    Description: The Cluster which need to be build is for which one Dev,RC1,CQA,PROD.
+                                // Check for suspended processes in the Auto Scaling Group
+                                def suspended_processes = sh(script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg_name1 --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text", returnStdout: true).trim()
 
+                                if (!suspended_processes.isEmpty()) {
+                                    echo "Suspended processes found for ASG $asg_name1: $suspended_processes"
+                                    // Resume suspended processes
+                                    sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg_name1", returnStdout: true).trim()
+                                    echo "Resumed suspended processes for ASG $asg_name1"
+                                } else {
+                                    echo "No suspended processes found for ASG $asg_name1"
+                                }
 
-Outputs:
-  ecsclustername:
-    Description: The  Name of the cluster for future reference
-    Value: !Ref crscluster
+                                // Scale up or down the Auto Scaling Group based on the operation
+                                switch (op_asg) {
+                                    case "Start":
+                                        echo "Updating desired capacity for ASG $asg_name1 to $desired_cap $min_cap $max_cap"
+                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity $desired_cap --min-size $min_cap --max-size $max_cap", returnStdout: true).trim()
+                                        echo "ASG $asg_name1 scaled to desired capacity of $desired_cap"
 
-  StackName:
-    Description: The  Name of Stack so we can refer for future purpose
-    Value: !Sub '${AWS::StackName}'
+                                        // Wait for instances to launch and check their state
+                                        def instance_state = sh(script: "aws autoscaling describe-auto-scaling-instances --query 'AutoScalingInstances[?AutoScalingGroupName==\"$asg_name1\"].LifecycleState' --output text", returnStdout: true).trim()
+                                        echo "Instance states for ASG $asg_name1: $instance_state"
+                                        break;
 
-Resources:
-  crscluster:  ##Using Ecs Cluster Resource from Aws
-    Type: AWS::ECS::Cluster
-    Properties:
-      ClusterName: !Sub '${crsnamespace}-${crsappname}-cluster' ##Name of the cluster
-      ClusterSettings:
-        - Name: containerInsights
-          Value: enabled
-      Tags:
-        - Key: Environment_Name
-          Value: !Ref crsenvironment
+                                    case "Stop":
+                                        echo "Stopping all instances in ASG $asg_name1 by setting desired capacity to 0"
+                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity 0 --min-size 0  --max-size 0", returnStdout: true).trim()
+                                        echo "ASG $asg_name1 scaled down to desired capacity of 0"
+                                        break;
 
-        - Key: Stack_Name
-          Value: !Sub '${AWS::StackName}'
-
-
-#################################End of Cloud formation Template ########################################################
+                                    default:
+                                        echo "No valid operation specified"
+                                        break;
+                                }
+                            } catch (err) {
+                                echo "ERROR CAUGHT: $err"
+                            }
+                        }
+                    }
+                }
+            }
+        }
