@@ -1,96 +1,10 @@
-stage('Scale Up ASG') {
-    steps {
-        script {
-            withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-                withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                    try {
-                        // Mapping for desired, minimum, and maximum capacities
-                        def capacityMap = [
-                            "test3": [desired: 1, min: 1, max: 2],
-                            "test2": [desired: 1, min: 1, max: 2],
-                            "test1": [desired: 1, min: 1, max: 1]
-                        ]
+                                echo "Stopping all instances in ASG $asg_name1 by setting desired capacity to 0"
+                                sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity 0 --min-size 0 --max-size 0", returnStdout: true).trim()
+                                echo "ASG $asg_name1 scaled down to desired capacity of 0"
 
-                        // Check if the ASG name exists in the capacity map
-                        if (!capacityMap.containsKey(asg_name1)) {
-                            error "Auto Scaling Group '$asg_name1' not found in the capacity map."
-                        }
-
-                        // Retrieve desired, minimum, and maximum capacities
-                        def desired_cap = capacityMap[asg_name1].desired
-                        def min_cap = capacityMap[asg_name1].min
-                        def max_cap = capacityMap[asg_name1].max
-
-                        echo "Auto Scaling Group: $asg_name1, Desired Capacity: $desired_cap, Minimum Capacity: $min_cap, Maximum Capacity: $max_cap"
-
-                        // Check for suspended processes in the Auto Scaling Group
-                        def suspended_processes = sh(script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg_name1 --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text", returnStdout: true).trim()
-
-                        if (!suspended_processes.isEmpty()) {
-                            echo "Suspended processes found for ASG $asg_name1: $suspended_processes"
-                            // Resume suspended processes
-                            sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg_name1", returnStdout: true).trim()
-                            echo "Resumed suspended processes for ASG $asg_name1"
-                        } else {
-                            echo "No suspended processes found for ASG $asg_name1"
-                        }
-
-                        // Scale up or down the Auto Scaling Group based on the operation
-                        switch (op_asg) {
-                            case "Start":
-                                if (asg_name1 == "test2") {
-                                    echo "Starting stopped instances in ASG $asg_name1"
-
-                                    // Get stopped instance IDs tagged for this ASG
-                                    def stopped_instance_ids = sh(script: "aws ec2 describe-instances --filters Name=tag:aws:autoscaling:groupName,Values=$asg_name1 Name=instance-state-name,Values=stopped --query 'Reservations[*].Instances[*].InstanceId' --output text", returnStdout: true).trim().split()
-
-                                    if (stopped_instance_ids.isEmpty()) {
-                                        echo "No stopped instances found in ASG $asg_name1. Scaling desired capacity."
-                                    } else {
-                                        stopped_instance_ids.each { instance_id ->
-                                            echo "Starting instance $instance_id in ASG $asg_name1"
-                                            sh(script: "aws ec2 start-instances --instance-ids $instance_id", returnStdout: true).trim()
-                                        }
-                                        echo "Started all stopped instances in ASG $asg_name1"
-                                    }
-
-                                    // Update ASG desired, min, and max capacities
-                                    echo "Updating desired capacity for ASG $asg_name1 to $desired_cap"
-                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity $desired_cap --min-size $min_cap --max-size $max_cap", returnStdout: true).trim()
-                                    echo "ASG $asg_name1 scaled to desired capacity of $desired_cap"
-                                } else {
-                                    echo "Updating desired capacity for ASG $asg_name1 to $desired_cap"
-                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity $desired_cap --min-size $min_cap --max-size $max_cap", returnStdout: true).trim()
-                                    echo "ASG $asg_name1 scaled to desired capacity of $desired_cap"
+                                // Stop the instances instead of terminating
+                                def instance_ids_to_stop = sh(script: "aws ec2 describe-instances --filters Name=tag:aws:autoscaling:groupName,Values=$asg_name1 Name=instance-state-name,Values=running --query 'Reservations[*].Instances[*].InstanceId' --output text", returnStdout: true).trim().split()
+                                instance_ids_to_stop.each { instance_id ->
+                                    echo "Stopping instance $instance_id in ASG $asg_name1"
+                                    sh(script: "aws ec2 stop-instances --instance-ids $instance_id", returnStdout: true).trim()
                                 }
-                                break
-
-                            case "Stop":
-                                if (asg_name1 == "test2") {
-                                    echo "Stopping all instances in ASG $asg_name1"
-                                    def running_instance_ids = sh(script: "aws ec2 describe-instances --filters Name=tag:aws:autoscaling:groupName,Values=$asg_name1 Name=instance-state-name,Values=running --query 'Reservations[*].Instances[*].InstanceId' --output text", returnStdout: true).trim().split()
-
-                                    running_instance_ids.each { instance_id ->
-                                        echo "Stopping instance $instance_id in ASG $asg_name1"
-                                        sh(script: "aws ec2 stop-instances --instance-ids $instance_id", returnStdout: true).trim()
-                                    }
-                                    echo "Stopped all running instances in ASG $asg_name1"
-                                } else {
-                                    echo "Stopping all instances in ASG $asg_name1 by setting desired capacity to 0"
-                                    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity 0 --min-size 0 --max-size 0", returnStdout: true).trim()
-                                    echo "ASG $asg_name1 scaled down to desired capacity of 0"
-                                }
-                                break
-
-                            default:
-                                echo "No valid operation specified"
-                                break
-                        }
-                    } catch (err) {
-                        echo "ERROR CAUGHT: $err"
-                    }
-                }
-            }
-        }
-    }
-}
