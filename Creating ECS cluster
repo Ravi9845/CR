@@ -29,3 +29,14 @@
                                         sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name ${asg_name1} --desired-capacity 0 --min-size 0 --max-size 0", returnStdout: true)
                                         echo "ASG ${asg_name1} scaled down to desired capacity of 0"
                                         break;
+usage: aws [options] <command> <subcommand> [<subcommand> ...] [parameters]
+To see help text, you can run:
+
+  aws help
+  aws <command> help
+  aws <command> <subcommand> help
+
+aws: error: the following arguments are required: --instance-ids
+
+[Pipeline] echo
+ERROR CAUGHT: hudson.AbortException: script returned exit code 252
