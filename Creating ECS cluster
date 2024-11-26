@@ -1,36 +1,11 @@
-case "Stop":
-    echo "Stopping all instances in ASG ${asg_name1}"
-    
-    // Enable instance protection first
-    sh(script: "aws autoscaling set-instance-protection --auto-scaling-group-name ${asg_name1} --protected-from-scale-in", returnStdout: true)
-    
-    // Get instance IDs from the ASG
-    def instance_ids = sh(
-        script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-name ${asg_name1} --query 'AutoScalingGroups[0].Instances[*].InstanceId' --output text",
-        returnStdout: true
-    ).trim()
-    
-    // Ensure instance_ids is not empty
-    if (instance_ids) {
-        def instance_ids_list = instance_ids.split("\\s+") // Ensure it splits correctly into a list of IDs
-
-        // Detach instances from ASG without terminating them
-        sh(script: """
-            aws autoscaling detach-instances \
-            --auto-scaling-group-name ${asg_name1} \
-            --instance-ids ${instance_ids_list.join(' ')} \
-            --should-decrement-desired-capacity
-        """)
-        
-        // Stop the detached instances
-        sh(script: "aws ec2 stop-instances --instance-ids ${instance_ids_list.join(' ')}")
-        
-        echo "Instances detached and stopped: ${instance_ids_list.join(', ')}"
-    } else {
-        echo "No running instances found in ASG ${asg_name1}."
-    }
-    
-    // Update ASG capacity to 0
-    sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name ${asg_name1} --desired-capacity 0 --min-size 0 --max-size 0", returnStdout: true)
-    echo "ASG ${asg_name1} scaled down to desired capacity of 0"
-    break;
+switch (ASG_name) {
+	case "dm-ec2-etl":
+		return ["dm-ecs"]
+		break
+	case "dm2-DebtManager-activemq-asg":
+		return ["dm2-cluster"]
+		break
+	case "test || test1 || test2":
+		return ["123-cluster", "PRD-cluster", "dev-cluster", "tdf-cluster"]
+		break
+}
