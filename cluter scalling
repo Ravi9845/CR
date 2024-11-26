@@ -1,68 +1,38 @@
 stage('Scale Up ASG') {
-            steps {
-                script {
-                    withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
-                        withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
-                            try {
-                                // Mapping for desired and minimum capacities
-                                def capacityMap = [
-                                    "stack-crmjrlk0dcbvtnvzp-rtyu-erfdv": [desired: 1, min: 1, max: 2],
-                                    "test-ec2": [desired: 1, min: 1, max: 2],
-                                    "akash-asg": [desired: 1, min: 1, max: 2],
-                                    "stack-123456": [desired: 1, min: 1, max: 2]
-                                ]
-                                
-                                // Check if the ASG name exists in the capacityMap
-                                if (!capacityMap.containsKey(asg_name1)) {
-                                    error "Auto Scaling Group '$asg_name1' not found in the capacity map."
-                                }
+    steps {
+        script {
+            withAWS(region: CICD_REGION, roleAccount: CICD_ACCOUNT_ID, role: CICD_REGION_ROLE, duration: 3600) {
+                withAWS(region: AWS_DEPLOYMENT_REGION, roleAccount: AWS_ACCOUNT_ID, role: AWS_IAM_ROLE_NAME, duration: 3600) {
+                    try {
+                        // Mapping for user-friendly names to actual ASG names
+                        def asgNameMap = [
+                            "test56": "stack-123456",
+                            "test89": "stack-crmjrlk0dcbvtnvzp-rtyu-erfd",
+                            "test-ec2": "test-ec2",
+                            "akash-asg": "akash-asg"
+                        ]
+                        
+                        // Mapping for desired, min, and max capacities
+                        def capacityMap = [
+                            "stack-123456": [desired: 1, min: 1, max: 2],
+                            "stack-crmjrlk0dcbvtnvzp-rtyu-erfd": [desired: 1, min: 1, max: 2],
+                            "test-ec2": [desired: 1, min: 1, max: 2],
+                            "akash-asg": [desired: 1, min: 1, max: 2]
+                        ]
 
-                                // Retrieve desired , minimum and maximum capacities
-                                def desired_cap = capacityMap[asg_name1].desired
-                                def min_cap = capacityMap[asg_name1].min
-                                def max_cap = capacityMap[asg_name1].max
-                                
-                                echo "Auto Scaling Group: $asg_name1, Desired Capacity: $desired_cap, Minimum Capacity: $min_cap, maximun Capacity: $max_cap"
-
-                                // Check for suspended processes in the Auto Scaling Group
-                                def suspended_processes = sh(script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $asg_name1 --query 'AutoScalingGroups[0].SuspendedProcesses[*].ProcessName' --output text", returnStdout: true).trim()
-
-                                if (!suspended_processes.isEmpty()) {
-                                    echo "Suspended processes found for ASG $asg_name1: $suspended_processes"
-                                    // Resume suspended processes
-                                    sh(script: "aws autoscaling resume-processes --auto-scaling-group-name $asg_name1", returnStdout: true).trim()
-                                    echo "Resumed suspended processes for ASG $asg_name1"
-                                } else {
-                                    echo "No suspended processes found for ASG $asg_name1"
-                                }
-
-                                // Scale up or down the Auto Scaling Group based on the operation
-                                switch (op_asg) {
-                                    case "Start":
-                                        echo "Updating desired capacity for ASG $asg_name1 to $desired_cap $min_cap $max_cap"
-                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity $desired_cap --min-size $min_cap --max-size $max_cap", returnStdout: true).trim()
-                                        echo "ASG $asg_name1 scaled to desired capacity of $desired_cap"
-
-                                        // Wait for instances to launch and check their state
-                                        def instance_state = sh(script: "aws autoscaling describe-auto-scaling-instances --query 'AutoScalingInstances[?AutoScalingGroupName==\"$asg_name1\"].LifecycleState' --output text", returnStdout: true).trim()
-                                        echo "Instance states for ASG $asg_name1: $instance_state"
-                                        break;
-
-                                    case "Stop":
-                                        echo "Stopping all instances in ASG $asg_name1 by setting desired capacity to 0"
-                                        sh(script: "aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name1 --desired-capacity 0 --min-size 0  --max-size 0", returnStdout: true).trim()
-                                        echo "ASG $asg_name1 scaled down to desired capacity of 0"
-                                        break;
-
-                                    default:
-                                        echo "No valid operation specified"
-                                        break;
-                                }
-                            } catch (err) {
-                                echo "ERROR CAUGHT: $err"
-                            }
+                        // Translate user-friendly ASG name to actual
+          // Translate user-friendly ASG name to actual
+                        if (!asgNameMap.containsKey(asg_name1)) {
+                            error "Invalid ASG name '$asg_name1' provided. Please check the mapping."
                         }
-                    }
-                }
-            }
-        }
+                        def actualAsgName = asgNameMap[asg_name1]
+                        
+                        // Check if the actual ASG name exists in the capacity map
+                        if (!capacityMap.containsKey(actualAsgName)) {
+                            error "Capacity mapping for ASG '$actualAsgName' not found."
+                        }
+
+                        // Retrieve desired, minimum, and maximum capacities
+                        def desired_cap = capacityMap[actualAsgName].desired
+                        def min_cap = capacityMap[actualAsgName].min
+                        def max_cap = capacityMap[actualAsgName].max
