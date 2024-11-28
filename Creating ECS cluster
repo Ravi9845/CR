@@ -106,3 +106,9 @@ stage('Scale ECS Services Based on Cluster') {
         }
     }
 }
+                            switch (op_ecs){ 
+                                case 'start':
+                                    def min_size = selected_capacity
+                                    def max_size = selected_capacity
+                                    def desired_size = selected_capacity
+                                    break
