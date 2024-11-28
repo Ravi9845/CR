@@ -112,3 +112,17 @@ stage('Scale ECS Services Based on Cluster') {
                                     def max_size = selected_capacity
                                     def desired_size = selected_capacity
                                     break
+
+                                        case "stop":
+                                            if (db_status == "stopped") {
+                                                echo "RDS cluster $rds_cluster is already stopped. No action needed."
+                                                rds_operation_success = true  // Set flag to true since no action was needed
+                                            } else {
+                                                echo "Stopping RDS cluster as ECS service is set to stop."
+                                                def db_stop = sh(
+                                                    script: "aws rds stop-db-cluster --db-cluster-identifier $rds_cluster | xargs",
+                                                    returnStdout: true
+                                                ).trim()
+                                                echo "RDS cluster $rds_cluster is stopping..."
+                                                rds_operation_success = true  // Set flag to true when RDS is stopped successfully
+                                            }
