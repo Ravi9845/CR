@@ -125,3 +125,99 @@ services:
 #   default:
 #     name: qwert_network
 #     external: true
+
+============================================
+#!/bin/bash
+# The Boot Strapper
+# Variables
+source /opt/md-container/scripts/configuration/installation.properties
+source /opt/md-container/scripts/configuration/md.properties
+
+# Java
+yum install -y java-11-amazon-corretto.x86_64
+
+# Install Components
+cd /opt/md-container/scripts/installation
+chmod +x *.sh
+./install_docker.sh
+./authorize_ecr.sh
+./install_docker_compose.sh
+./install_postgresql15.sh
+./install_devtools.sh
+
+# Log Directory
+mkdir -p /opt/md-container/logs/deployment
+chmod -R +r /opt/md-container/logs
+
+# Install Tenant Amdin
+./install_amdin.sh
+
+# Log4j
+log4jDir=/usr/local/md/log4j
+if ! wget http://12/DailyBuilds/${testVersion}/test-Log4j-Config-Containers-${testVersion}.zip; then
+
+    echo "mdFS:  Failed to download log4j configuration zip"
+    exit 3
+fi
+if [ ! -d $log4jDir ]; then
+    mkdir -p $log4jDir
+fi
+
+unzip -qq test-Log4j-Config-Containers-${testVersion}.zip -d $log4jDir
+rm -f test-Log4j-Config-Containers-${testVersion}.zip
+
+# md-foo-apps container configuration
+./install_fooapps_and_help.sh
+
+# Run ActiveMQ Artemis setup.
+./install_artemis.sh
+
+# Install Tenants
+# Will Loop over all tenant names stored in initialTenants variable in installation.properties.
+./install_tenants.sh
+
+# Install Pre-Configured 4 tenant fooLogic Repository
+./install_foologic.sh
+
+# Install opp configuration for each initial tenant
+# Will Loop over all tenant names stored in initialTenants variable in installation.properties.
+./install_opp_tenants.sh
+
+# Install opp UI and Help based on versions in opp.properties.
+./install_opp_ui_and_help.sh
+
+# Install KeyCloak.  Setup database and import realm.
+./install_keycloak.sh | tee ${logsDirectory}/deployment/keycloak.log
+
+# Install Tenant Amdin
+#./install_ta.sh
+
+# Set aliases for ease of use.
+cat << BASHES >> ~/.bash_profile
+alias startmd='systemctl start md-compose.service'
+alias stopmd='systemctl stop md-compose.service'
+
+alias cleanmd='rm -Rf /opt/md-container/logs/*/*.log'
+
+alias inbatch='docker exec -it md-batch /bin/bash'
+alias infooapps='docker exec -it md-foo-apps /bin/bash'
+alias infp='docker exec -it md-fp /bin/bash'
+alias inrest='docker exec -it md-rest /bin/bash'
+alias inta='docker exec -it md-ta /bin/bash'
+BASHES
+
+source ~/.bash_profile
+
+# Setup Docker Compose as a service
+cp /opt/md-container/scripts/services/md-compose.service /etc/systemd/system/
+
+systemctl daemon-reload
+
+/opt/md-container/scripts/installation/authorize_ecr.sh
+
+# Docker Container Pulls for Service Containers
+## Debt Manager
+/usr/local/bin/docker-compose -f /opt/md-container/docker-compose/md-compose.yml --env-file /opt/md-container/docker-compose/docker.env pull
+## opp. Right now being done in md-compose.yml
+#/usr/local/bin/docker-compose -f /opt/md-container/docker-compose/opp-compose.yml pull
+
