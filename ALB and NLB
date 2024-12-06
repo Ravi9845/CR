@@ -1,4 +1,790 @@
-					def imageList = []
-                    if (params.dm_rest_services) {
-                        imageList.add('dm-rest-services')
+#build.sh it is
+x-common_environment: &common_environment
+  dbhost: ${t1_DB_HOST}
+  drtrt: 123
+  mqhost: host.docker.internal
+  mqport: 3456
+  tadb: ${t1_TA_DB_NAME}
+  tadbuser: ${t1_TA_USERNAME}
+  tadbpassword: ${t1_TA_PASSWORD}
+  nodename: t1
+  debug: false
+
+x-common_res: &common_res
+  ssmkeyprefix: ${SSMKEYPREFIX}
+  ssmregion: ${SSMREGION}
+  resdecisionservicehost: ${res_INSTANCE}
+  resdecisionmanagerhost: ${res_INSTANCE}
+
+x-common_hosts: &common_hosts
+  extra_hosts:
+    - host.docker.internal:er-wegateway
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}
+    restart: always
+    container_name: keycloak
+    ports:
+      - 0.0.0.0:123:1234
+    environment:
+      - KEYCLOAK_At1IN=${KEYCLOAK_At1IN}
+      - KEYCLOAK_At1IN_PASSWORD=${KEYCLOAK_At1IN_PASSWORD}
+      - sc_DB=postgres
+      - sc_DB_URL=jdbc:postgresql://host.docker.internal:5432/keycloak
+      - sc_DB_USERNAME=${sc_DB_USERNAME}
+      - sc_DB_PASSWORD=${sc_DB_PASSWORD}
+    command:
+      - start-dev
+    <<: *common_hosts
+  t1-res:
+    image: ${ECR_REPO}/t1-res:${t1_res_TAG}
+    container_name: t1-res
+    ports:
+      - 0.0.0.0:123:234
+    env_file:
+      - /opt/t1-meet/res.env.settings
+    volumes:
+      - ${meet_REPO}:/var/opt/sl/data
+    << : *common_hosts
+  t1-fit-apps:
+    image: ${ECR_REPO}/t1-fit-apps:${t1_BUILD_TAG}
+    container_name: t1-fit-apps
+    ports:
+      - 80:80
+    volumes:
+      - ${NGINX_CONFIG}/t1-fit-apps:/usr/share/nginx/servers
+      - ${t1_CONTAINER}/logs:/usr/share/nginx/html/logs
+      - ${NGINX_HTTP}/ui:/usr/share/nginx/html/ui
+      - ${NGINX_HTTP}/t1_BrowserHelp:/usr/share/nginx/html/t1_BrowserHelp
+      - ${NGINX_HTTP}/rt-help:/usr/share/nginx/html/rt-help
+      - ${NGINX_HTTP}/rt-ui:/usr/share/nginx/html/rt-ui
+    depends_on:
+      - t1-rest
+      - t1-batch
+      - t1-fp
+  t1-rest:
+    image: ${ECR_REPO}/t1-rest-services:${t1_BUILD_TAG}
+    container_name: t1-rest
+    environment:
+      << : [*common_environment, *common_res]
+    volumes:
+      - ${t1_CONTAINER}/logs/rest:/usr/local/tomcat/logs
+      - ${t1_t1FS_FOLDER}:/usr/local/t1
+    << : *common_hosts
+    depends_on:
+      - t1-res
+  t1-batch:
+    image: ${ECR_REPO}/t1-batch-services:${t1_BUILD_TAG}
+    container_name: t1-batch
+    environment:
+      << : [*common_environment, *common_res]
+    volumes:
+      - ${t1_CONTAINER}/logs/batch:/usr/local/tomcat/logs
+      - ${t1_t1FS_FOLDER}:/usr/local/t1
+    << : *common_hosts
+    depends_on:
+      - t1-res
+  t1-fp:
+    image: ${ECR_REPO}/t1-file-processor:${t1_BUILD_TAG}
+    container_name: t1-fp
+    environment:
+      << : *common_environment
+    volumes:
+      - ${t1_CONTAINER}/logs/fp:/usr/local/tomcat/logs
+      - ${t1_t1FS_FOLDER}:/usr/local/t1
+    << : *common_hosts
+    depends_on:
+      - t1-res
+  # t1-ta:
+  #   image: ${ECR_REPO}/t1-tenant-at1in-service:${TA_SERVICE_BUILD_TAG}
+  #   container_name: t1-ta
+  #   environment:
+  #     - TA_SSL_ENABLED=false
+  #     - DB_NAME=${t1_TA_DB_NAME}
+  #     - DB_USERNAME=${t1_TA_USERNAME}
+  #     - DB_PASSWORD=${t1_TA_PASSWORD}
+  #     - DB_HOST=${t1_DB_HOST}
+  #     - DB_PORT=5432
+  #     - OAUTH2_ISSUER_URL=${OAUTH2_ISSUER_URL}
+  #     - OAUTH2_CLIENT_ID=${OAUTH2_CLIENT_ID}
+  #   volumes:
+  #      - ${t1_CONTAINER}/logs/ta:/usr/app/logs
+  #   << : *common_hosts
+  # t1-ta-ui:
+  #   image: ${ECR_REPO}/t1-tenant-at1in-ui:${TA_UI_BUILD_TAG}
+  #   container_name: t1-ta-ui
+  #   ports:
+  #     - 0.0.0.0:81:81
+  #   volumes:
+  #     - ${NGINX_CONFIG}/t1-ta-ui:/usr/share/nginx/servers
+  #   depends_on:
+  #     - t1-ta
+
+# networks:
+#   default:
+#     name: qwert_network
+#     external: true
+
+==================================================================================
+pipeline {
+    // Pipeline Requires IAM permissions
+    //  "iam:CreateServiceLinkedRole",
+    //  "imagebuilder:ListImagePipelineImages",
+    //  "imagebuilder:GetImagePipeline",
+    //  "imagebuilder:UpdateDistributionConfiguration",
+    //  "imagebuilder:StartImagePipelineExecution",
+    //   "imagebuilder:GetDistributionConfiguration"
+    agent any
+    parameters {
+        // Active Choices Parameter - Fetch versions from a simple HTTP page
+        reactiveChoice(
+            name: 'md_VERSION',
+            description: 'Select the Debt Manager Version to build.',
+            choiceType: 'PT_SINGLE_SELECT',
+            filterable: true,
+            script: [
+                $class: 'GroovyScript',
+                script: [
+                    script: '''
+                        import org.jsoup.Jsoup
+                        import java.util.regex.Pattern
+
+                        def url = 'http://1233/rBuilds/'
+                        def document = Jsoup.connect(url).get()
+
+                        // List of texts to filter out
+                        def excludeTexts = ["Name", "Last modified", "Size", "Parent Directory"]
+
+                        // Define the version pattern: YYYY.M.V-R (e.g., 2024.7.0-3)
+                        def versionPattern = Pattern.compile("\\\\d{4}\\\\.\\\\d{1,2}\\\\.\\\\d+-\\\\d+")
+
+                        // Select all <a> tags and filter out those with the specified texts
+                        def linksText = document.select("a").findAll { link ->
+                            def linkText = link.text().trim()
+                            return !excludeTexts.contains(linkText) && !linkText.isEmpty()
+                        }
+
+                        // Filter the list to only include valid version strings
+                        def validLinksTextList = linksText.collect { it.text().replaceAll('/$', '') }
+                            .findAll { versionPattern.matcher(it).matches() }
+
+                        // Parse and sort by version format: YYYY.M.V-R
+                        def sortedLinksTextList = validLinksTextList.sort { a, b ->
+                            def tokenrt = a.tokenize(".-").collect { it.toInteger() }
+                            def tokensB = b.tokenize(".-").collect { it.toInteger() }
+
+                            def yearA = tokenrt[0]
+                            def versionA = tokenrt[1]
+                            def revisionA = tokenrt[2]
+                            def buildA = tokenrt[3]
+
+                            def yearB = tokensB[0]
+                            def versionB = tokensB[1]
+                            def revisionB = tokensB[2]
+                            def buildB = tokensB[3]
+
+                            // Compare by year, then version, then revision, then build number
+                            return yearB <=> yearA ?: versionB <=> versionA ?: revisionB <=> revisionA ?: buildB <=> buildA
+                        }
+
+                        // Return the sorted list
+                        return sortedLinksTextList
+                    ''',
+                    fallbackScript: 'return ["Error retrieving md versions from r Builds."]'
+                ]
+            ]
+        )
+        reactiveChoice(
+            name: 'md_mdd_VERSION',
+            description: 'Select the version of the md-mdd container from ECR',
+            choiceType: 'PT_SINGLE_SELECT',
+            filterable: true,
+            script: [
+                $class: 'GroovyScript',
+                script: [
+                    script: '''
+                        import com.amazonaws.services.ecr.*
+                        import com.amazonaws.services.ecr.model.*
+
+                        // Replace with your region and repository name
+                        def region = "us-east-1"
+                        def repositoryName = "md-mdd"
+
+                        // Initialize AWS ECR Client
+                        def ecrClient = AmazonECRClientBuilder.standard()
+                            .withRegion(region)
+                            .build()
+
+                        // Describe images to get detailed information, including pushedAt
+                        def describeImagesRequest = new DescribeImagesRequest().withRepositoryName(repositoryName)
+                        def describeImagesResult = ecrClient.describeImages(describeImagesRequest)
+
+                        // Extract image details
+                        def imageDetails = describeImagesResult.getImageDetails()
+
+                        // Sort by pushedAt in descending order (newest first)
+                        def sortedTags = imageDetails.sort { a, b ->
+                            b.getImagePushedAt().compareTo(a.getImagePushedAt())
+                        }.collect { it.imageTags }.flatten().findAll { it != null }
+
+                        // Return the sorted tags for the dropdown
+                        return sortedTags
+                    ''',
+                    fallbackScript: 'return ["Error retrieving md-mdd tags from ECR"]'
+                ]
+            ]
+        )
+        reactiveChoice(
+            name: 'pop_VERSION',
+            description: 'Select the pop Container Version to include.',
+            choiceType: 'PT_SINGLE_SELECT',
+            filterable: true,
+            script: [
+                $class: 'GroovyScript',
+                script: [
+                    script: '''
+                        import com.amazonaws.services.ecr.*
+                        import com.amazonaws.services.ecr.model.*
+
+                        // Replace with your region and repository name
+                        def region = "us-east-1"
+                        def repositoryName = "pop-service"
+
+                        // Initialize AWS ECR Client
+                        def ecrClient = AmazonECRClientBuilder.standard()
+                            .withRegion(region)
+                            .build()
+
+                        // Describe images to get detailed information
+                        def describeImagesRequest = new DescribeImagesRequest().withRepositoryName(repositoryName)
+                        def describeImagesResult = ecrClient.describeImages(describeImagesRequest)
+
+                        // Extract all tags
+                        def allTags = describeImagesResult.getImageDetails()
+                            .collect { it.imageTags }
+                            .flatten()
+                            .findAll { it != null }
+                            .unique()
+
+                        // Custom sorting function
+                        def customSort = { a, b ->
+                            def aComponents = a.split(/[.-]/)
+                            def bComponents = b.split(/[.-]/)
+
+                            // Check if both start with a year
+                            if (aComponents[0].length() == 4 && bComponents[0].length() == 4) {
+                                for (int i = 0; i < Math.min(aComponents.length, bComponents.length); i++) {
+                                    def aNum = aComponents[i].isInteger() ? aComponents[i].toInteger() : -1
+                                    def bNum = bComponents[i].isInteger() ? bComponents[i].toInteger() : -1
+
+                                    if (aNum != bNum) {
+                                        return bNum <=> aNum // Descending order
+                                    }
+                                }
+                                return bComponents.length <=> aComponents.length // Longer version is considered newer
+                            }
+
+                            // If one starts with a year and the other doesn't
+                            if (aComponents[0].length() == 4 && bComponents[0].length() != 4) {
+                                return -1
+                            }
+                            if (aComponents[0].length() != 4 && bComponents[0].length() == 4) {
+                                return 1
+                            }
+
+                            // For non-year versions (like 'develop-XXX' or 'latest'), sort alphabetically
+                            return b <=> a
+                        }
+
+                        // Sort the tags
+                        def sortedTags = allTags.sort(customSort)
+
+                        // Return the sorted tags for the dropdown
+                        return sortedTags
+
+                    ''',
+                    fallbackScript: 'return ["Error retrieving pop-serviceS tags from ECR"]'
+                ]
+            ]
+        )
+       reactiveChoice(
+           name: 'pop_UI_VERSION',
+           description: 'Select the pop UI Version to include.',
+           choiceType: 'PT_SINGLE_SELECT',
+           filterable: true,
+           script: [
+               $class: 'GroovyScript',
+               script: [
+                   script: '''
+                       import groovy.json.JsonSlurper
+                       import java.text.SimpleDateFormat
+
+                       def nexusUrl = "http://nexus.infra.htrdev.com:18/service/rest/v1"
+                       def repositoryName = "pop-releases"
+                       def artifactName = "pop-ui"
+
+                       def searchUrl = "${nexusUrl}/search?repository=${repositoryName}&name=${artifactName}"
+
+                       def connection = new URL(searchUrl).openConnection()
+                       connection.setRequestProperty("Accept", "application/json")
+                       // Add authentication if required
+                       // connection.setRequestProperty("Authorization", "Basic " + "username:password".bytes.encodeBase64().toString())
+
+                       def response = new JsonSlurper().parse(connection.inputStream)
+
+                       def versions = response.items.collect { item ->
+                           item.version
+                       }
+
+                       // Custom sorting function
+                       def sortVersions = { List<String> versionList ->
+                           versionList.sort { a, b ->
+                               def datePattern = ~/^\\d{8}/
+                               def aMatch = a =~ datePattern
+                               def bMatch = b =~ datePattern
+
+                               if (aMatch && bMatch) {
+                                   return b.compareTo(a) // Reverse order for date-based versions
+                               } else if (aMatch) {
+                                   return -1 // a comes first
+                               } else if (bMatch) {
+                                   return 1  // b comes first
+                               } else {
+                                   return b.compareTo(a) // Reverse order for non-date versions
+                               }
+                           }
+                       }
+
+                       return sortVersions(versions)
+                   ''',
+                   fallbackScript: 'return ["Error retrieving versions from Nexus"]'
+               ]
+           ]
+       )
+
+    }
+    stages {
+        stage('Verify Container Artifacts Exist') {
+            steps {
+                script {
+                    def version = params.md_VERSION
+                    def repositories = [
+                        "md-mm-services",
+                        "md-mmu-processor",
+                        "md-mmuuu-apps",
+                        "md-rest-services"
+                    ]
+                    def missingImages = []
+
+                    repositories.each { repo ->
+                        def command = "aws ecr describe-images --repository-name ${repo} --image-ids imageTag=${version}"
+                        def result = sh(script: command, returnStatus: true)
+
+                        if (result != 0) {
+                            missingImages.add(repo)
+                        }
                     }
+
+                    if (missingImages) {
+                        error "Verification failed: Missing Docker images for version '${version}' in the following repositories: ${missingImages.join(', ')}"
+                    } else {
+                        echo "Verification successful: All Docker images for version '${version}' are available."
+                    }
+                }
+            }
+        }
+        stage('Check EC2 Image Builder Status') {
+            steps {
+                script {
+                    // Define the pipeline ARN
+                    def pipelineArn = "arn:aws:imagebuilder:us-east-1:828586629811:image-pipeline/test-ami-pipeline"
+
+                    // Get the current image build status
+                    def currentStatuses = sh(script: "aws imagebuilder list-image-pipeline-images --image-pipeline-arn ${pipelineArn} --query 'imageSummaryList[*].state.status' --output text", returnStdout: true).trim()
+
+                    def activeStatusCodes = ['PENDING', 'CREATING', 'BUILDING', 'TESTING', 'DISTRIBUTING', 'INTEGRATING']
+                    def pattern = activeStatusCodes.join('|')
+                    // Print the status for debugging purposes
+                    echo "EC2 Image Builder pipeline statuses: ${currentStatuses}"
+
+                    // Check if the status is "BUILDING"
+                    if (currentStatuses =~ pattern) {
+                        error "EC2 Image Builder pipeline is currently running. Terminating Jenkins pipeline."
+                    } else {
+                        echo "EC2 Image Builder pipeline is not running. Proceeding with Jenkins pipeline."
+                    }
+                }
+            }
+        }
+        stage('Update Parameter Store with Selected Versions') {
+            steps {
+                script {
+                    // Define a list of versions and their corresponding parameter store keys
+                    def versionParams = [
+                        [key: "/devops/cicd/testami/build/mdversion", version: params.md_VERSION],
+                        [key: "/devops/cicd/testami/build/mdmddtag", version: params.md_mdd_VERSION],
+                        [key: "/devops/cicd/testami/build/popversion", version: params.pop_VERSION],
+                        [key: "/devops/cicd/testami/build/popuiversion", version: params.pop_UI_VERSION]
+                        // Add more keys here.  Commas needed after all but the last one.
+                    ]
+
+                    // Loop through the list and update each Parameter Store key
+                    versionParams.each { param ->
+                        if (!param.version) {
+                            error "No version selected for key '${param.key}'."
+                        }
+
+                        sh """
+                            aws ssm put-parameter --name ${param.key} --value ${param.version} --type String --overwrite
+                        """
+
+                        echo "Parameter Store key '${param.key}' updated with version '${param.version}'."
+                    }
+                }
+            }
+        }
+        stage('Update CloudFormation Stack') {
+            steps {
+                script {
+                    def stackName = "testami-Image-Pipeline"
+                    def changeSetName = "${stackName}-changeset-${env.BUILD_ID}"
+
+                    // Create a change set
+                    sh """
+                        aws cloudformation create-change-set --stack-name ${stackName} --change-set-name ${changeSetName} --use-previous-template
+                    """
+                    sleep(time: 10, unit: 'SECONDS')
+
+                    // Wait for that changeset to be CREATE_COMPLETE or FAILED.
+                    def changeSetStatus = ''
+                    def csmaxRetries = 10
+                    def csretryCount = 0
+                    def csdelaySeconds = 10 // Delay between polls
+                    while (csretryCount < csmaxRetries) {
+                        changeSetStatus = sh(script: "aws cloudformation describe-change-set --stack-name ${stackName} --change-set-name ${changeSetName} --query 'Status' --output text", returnStdout: true).trim()
+
+                        echo "Current Change Set Creation status: ${changeSetStatus}"
+                        // Check for a Success.  If a faulure determine if its because no changes are detected or some other failure.
+                        if (changeSetStatus == "CREATE_COMPLETE") {
+                            echo "CloudFormation ChangeSet '${changeSetName}' created successfully."
+
+                            // Initiate CloudFormation stack update via change set
+                            sh """
+                                aws cloudformation execute-change-set --stack-name ${stackName} --change-set-name ${changeSetName}
+                            """
+
+                            echo "CloudFormation stack '${stackName}' update initiated with change-set ${changeSetName}."
+                            break
+                        } else if (changeSetStatus == "FAILED") {
+                            def changes = sh(script: "aws cloudformation describe-change-set --stack-name ${stackName} --change-set-name ${changeSetName} --query 'Changes' --output text", returnStdout: true).trim()
+                            if (!changes) {
+                                echo "No changes detected.  Failure status is normal if there are no changes.  Skipping stack update."
+                                break
+                            } else {
+                                def reason = sh(script: "aws cloudformation describe-change-set --stack-name ${stackName} --change-set-name ${changeSetName} --query 'StatusReason' --output text", returnStdout: true).trim()
+                                echo "Changes detected but Change Set still in Failed Status."
+                                echo "Removing Change Set."
+                                sh """
+                                    aws cloudformation delete-change-set --stack-name ${stackName} --change-set-name ${changeSetName}
+                                """
+                                error "Change Set Failure Reason: ${reason}"
+                            }
+                        }
+                        sleep(csdelaySeconds)
+                        csretryCount++
+                        if (csretryCount >= csmaxRetries) {
+                            error "CloudFormation Change Set '${changeSetName}' did not reach a desired status within an appropreate amount of time."
+                        }
+                    }
+
+                    // Poll for stack update completion
+                    def stackStatus = ''
+                    def maxRetries = 20
+                    def retryCount = 0
+                    def delaySeconds = 30 // Delay between polls
+
+                    while (retryCount < maxRetries) {
+                        stackStatus = sh(script: "aws cloudformation describe-stacks --stack-name ${stackName} --query 'Stacks[0].StackStatus' --output text", returnStdout: true).trim()
+                        echo "Current stack status: ${stackStatus}"
+
+                        if (stackStatus == "UPDATE_COMPLETE") {
+                            echo "CloudFormation stack '${stackName}' update completed successfully."
+                            break
+                        } else if (stackStatus == "UPDATE_FAILED" || stackStatus == "UPDATE_ROLLBACK_COMPLETE") {
+                            error "CloudFormation stack '${stackName}' update failed or rolled back. Status: ${stackStatus}"
+                        }
+
+                        sleep(delaySeconds)
+                        retryCount++
+                    }
+
+                    if (retryCount >= maxRetries) {
+                        error "CloudFormation stack '${stackName}' update did not complete within the expected time."
+                    }
+                    echo "Removing Change Set."
+                    sh """
+                        aws cloudformation delete-change-set --stack-name ${stackName} --change-set-name ${changeSetName}
+                    """
+                }
+            }
+        }
+        stage('Extract and Compare AMI Name from Distribution Configuration') {
+            steps {
+                script {
+                    def distributionConfigArn = "arn:aws:imagebuilder:us-east-1:828586629811:distribution-configuration/test-ami-distro-config" // Replace with your distribution configuration ARN
+                    def expectedAmiName = params.md_VERSION
+
+                    // Retrieve and query the distribution configuration
+                    def query = "distributionConfiguration.distributions[0].amiDistributionConfiguration.amiTags.DebtManager"
+                    def actualmdVersion = sh(script: "aws imagebuilder get-distribution-configuration --distribution-configuration-arn ${distributionConfigArn} --query '${query}' --output text", returnStdout: true).trim()
+
+                    echo "md Version in distribution configuration: ${actualmdVersion}"
+
+                    // Compare the extracted AMI name with the expected name
+                    if (actualmdVersion != expectedAmiName) {
+                        error "Verification failed: Expected version '${expectedAmiName}', but found '${actualmdVersion}'."
+                    }
+                }
+            }
+        }
+        stage('Start EC2 Image Builder Pipeline and Wait for Completion') {
+            steps {
+                script {
+                    def pipelineArn = "arn:aws:imagebuilder:us-east-1:828586629811:image-pipeline/test-ami-pipeline"
+
+                    // Start the EC2 Image Builder pipeline
+                    def executionId = sh(script: "aws imagebuilder start-image-pipeline-execution --image-pipeline-arn ${pipelineArn} --query 'imageBuildVersionArn' --output text", returnStdout: true).trim()
+                    echo "Started EC2 Image Builder pipeline execution: ${executionId}"
+                    sleep 10
+
+                    // Poll for pipeline execution completion
+                    def executionStatus = ''
+                    def maxRetries = 120
+                    def retryCount = 0
+                    def delaySeconds = 60 // Delay between polls
+
+                    echo "Status of the pipeline execution will be checked every ${delaySeconds} seconds up to maximum of ${maxRetries} retries."
+                    while (retryCount < maxRetries) {
+                        executionStatus = sh(script: "aws imagebuilder get-image --image-build-version-arn ${executionId} --query 'image.state.status' --output text", returnStdout: true).trim()
+                        echo "[${retryCount}] Current pipeline execution status: ${executionStatus}"
+
+                        if (executionStatus == "AVAILABLE") {
+                            echo "EC2 Image Builder pipeline execution completed successfully."
+                            break
+                        } else if (executionStatus == "FAILED" || executionStatus == "CANCELLED") {
+                            error "EC2 Image Builder pipeline execution failed or was cancelled. Status: ${executionStatus}"
+                        }
+
+                        sleep(delaySeconds)
+                        retryCount++
+                    }
+
+                    if (retryCount >= maxRetries) {
+                        error "EC2 Image Builder pipeline execution did not complete within the expected time."
+                    }
+                }
+            }
+        }
+        stage('Summary') {
+            steps {
+                script {
+                    echo "Included Debt Manager Version: ${params.md_VERSION}"
+                }
+            }
+        }
+    }
+}
+=================================================================================================
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'test AMI - EC2 Image Builder - Pipeline'
+
+Parameters:
+  mdVersionNumber:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: 'md Version to be included in AMI'
+    Default: '/devops/cicd/testami/build/mdversion'
+  mdmddTag:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: 'md-mdd/forLogic tag to be included in AMI'
+    Default: '/devops/cicd/testami/build/mdmddtag'
+  oppVersionNumber:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: 'opp Version to be included in AMI'
+    Default: '/devops/cicd/testami/build/oppversion'
+  oppVersionNumber:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: 'opp Version to be included in AMI'
+    Default: '/devops/cicd/testami/build/oppversion'
+
+Resources:
+  InfraConfigtestami:
+    Type: 'AWS::ImageBuilder::InfrastructureConfiguration'
+    Properties:
+      Name: 'test-ami-configuration'
+      InstanceTypes:
+           - "xx"
+      Description: 'test AMI Infrastruction Configuration'
+      InstanceProfileName: 'mdBuildRole'
+      SecurityGroupIds:
+        - sg-12
+        - sg-123
+      SubnetId: 'subnet-01fa547dddd3da8fe'
+      KeyPair: 'Ec2-CICDKey'
+      Tags:
+        Usage: test-AMI
+
+  DistroConfigtestami:
+    Type: 'AWS::ImageBuilder::DistributionConfiguration'
+    Properties:
+      Name: 'test-ami-distro-config'
+      Distributions:
+        - Region: us-east-1
+          AmiDistributionConfiguration:
+            Name: !Sub 'testami-${mdVersionNumber}-{{ imagebuilder:buildDate }}'
+            Description: 'AMI created with Image Builder using parameter from SSM'
+            AmiTags:
+              Name: !Sub "testami for md ${mdVersionNumber}"
+              DebtManager: !Ref mdVersionNumber
+              forLogic: !Ref mdmddTag
+              opp: !Ref oppVersionNumber
+              opp: !Ref oppVersionNumber
+
+  Pipelinetestami:
+    Type: 'AWS::ImageBuilder::ImagePipeline'
+    Properties:
+      Name: 'test-ami-pipeline'
+      Description: 'Creates a AmazonLinux 2023 x86 based test AMI for DebtManager and Related Products'
+      ImageRecipeArn: !Ref testamiImageRecipe
+      InfrastructureConfigurationArn: !Ref InfraConfigtestami
+      DistributionConfigurationArn: !GetAtt DistroConfigtestami.Arn
+      Tags:
+        Usage: test-AMI
+
+  testamiImageRecipe:
+    Type: 'AWS::ImageBuilder::ImageRecipe'
+    Properties:
+      Name: "test-ami-recipe"
+      Version: '1.0.4'
+      ParentImage: arn:aws:imagebuilder:us-east-1:aws:image/amazon-linux-2023-x86/x.x.x
+      Description: 'test AMI Image Recipe to install Debt Manager and companion software.'
+      Components:
+        - ComponentArn: arn:aws:imagebuilder:us-east-1:aws:component/update-linux/x.x.x
+        - ComponentArn: !Ref ComponentBootstrap
+      BlockDeviceMappings:
+        - DeviceName: "/dtv/12"
+          Ebs:
+            DeleteOnTermination: true
+            Encrypted: false
+            VolumeType: "gp3"
+            VolumeSize: 250
+      Tags:
+        Usage: test-AMI
+
+  ComponentBootstrap:
+    Type: 'AWS::ImageBuilder::Component'
+    Properties:
+      Name: test-ami-install
+      Version: 1
+      Platform: 'Linux'
+      Description: This component will install test ami from bootstrapper files
+      SupportedOsVersions:
+        - "Amazon Linux 2023"
+        - "Amazon Linux 2"
+      Tags:
+        Usage: test-AMI
+      Data: |
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: Install_test_AMI
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      echo 'Installing Dependencies'
+                      yum install -y git openssh-clients python3 python3-pip dos2unix
+
+                      echo 'Installing yaml-path'
+                      pip install yamlpath
+
+                      echo 'Configuring Git'
+                      tmpName="$$-$RANDOM"
+                      privateKeyFileName=~/.ssh/git-identity-$tmpName
+                      passwordFeederName=~/.ssh/git-feeder-$tmpName.sh
+                      globalKeyFile=/etc/ssh/ssh_known_hosts
+                      gitHost=bitbucket.org
+                      gitBranch=main
+                      sshPort=22
+                      sshSocket="$gitHost:$sshPort"
+
+                      # Cleanup
+                      function cleanUp {
+                        rm -f "$privateKeyFileName" "$passwordFeederName"
+                      }
+                      trap cleanUp EXIT
+
+                      # Metadata Access
+                      echo 'Gathering Metadata'
+                      TOKEN=$(curl --request PUT "http://112/latest/api/token" --header "X-aws-ec2-metadata-token-ttl-seconds: 3600")
+                      accountId=$(aws sts get-caller-identity --output text --query 'Account')
+                      awsRegion=$(curl -s http://112/latest/dynamic/instance-identity/document --header "X-aws-ec2-metadata-token: $TOKEN" | yaml-get -p region )
+
+                      # Get Keys
+                      echo 'Pulling Parameter Store Entries'
+                      aws ssm get-parameters --names /devops/cicd/ssh/key/ml_jenkins_md/body --query 'Parameters[0].Value' --with-decryption --output text --region $awsRegion >"$privateKeyFileName"
+                      cat >"$passwordFeederName" <<EOF
+                      #!/bin/bash
+                      aws ssm get-parameters --names /devops/cicd/ssh/key/ml_jenkins_md/passphrase --query 'Parameters[0].Value' --with-decryption --output text --region $awsRegion
+                      EOF
+
+                      eval $(ssh-agent -s)
+                      chmod 0600 "$privateKeyFileName"
+                      chmod 0700 "$passwordFeederName"
+                      DISPLAY=1 SSH_ASKPASS="$passwordFeederName" ssh-add "$privateKeyFileName" </dev/null
+                      touch $globalKeyFile
+                      hostKey=$(ssh-keyscan -p $sshPort $gitHost 2>/dev/null)
+                      echo "# Host key for $sshSocket:" | tee -a $globalKeyFile >/dev/null
+                      echo $hostKey | tee -a $globalKeyFile >/dev/null
+
+                      # Bootstrapper Code
+                      echo 'Cloning test_ami repository'
+                      pushd /opt/
+                        git clone -b main --no-checkout git@${gitHost}:cr-software/test_ami.git
+                        mv test_ami md-container
+                        cd md-container
+                        git sparse-checkout init --cone
+                        git sparse-checkout set docker-compose scripts
+                        git checkout
+                      popd
+
+                      # Pull Parameters from Parameter Store and update versions in config files
+                      mdVersionNumber=$(aws ssm get-parameters --names /devops/cicd/testami/build/mdversion --query 'Parameters[0].Value' --with-decryption --output text)
+                      mdmddTag=$(aws ssm get-parameters --names /devops/cicd/testami/build/mdmddtag --query 'Parameters[0].Value' --with-decryption --output text)
+                      oppVersionNumber=$(aws ssm get-parameters --names /devops/cicd/testami/build/oppversion --query 'Parameters[0].Value' --with-decryption --output text)
+                      oppVersionNumber=$(aws ssm get-parameters --names /devops/cicd/testami/build/oppversion --query 'Parameters[0].Value' --with-decryption --output text)
+
+                      # Update versions in config files
+                      echo 'Updating versions in config files'
+                      sed -i "s/^md_BUILD_TAG.*/md_BUILD_TAG=\"${mdVersionNumber}\"/g" /opt/md-container/docker-compose/docker.env
+                      sed -i "s/^md_mdd_TAG.*/md_mdd_TAG=\"${mdmddTag}\"/g" /opt/md-container/docker-compose/docker.env
+                      sed -i "s/^opp_BUILD_TAG.*/opp_BUILD_TAG=\"${oppVersionNumber}\"/g" /opt/md-container/docker-compose/docker.env
+                      sed -i "s/^debtManagerVersion.*/debtManagerVersion=\"${mdVersionNumber}\"/g" /opt/md-container/scripts/configuration/md.properties
+                      sed -i "s/^oppVersion.*/oppVersion=\"${oppVersionNumber}\"/g" /opt/md-container/scripts/configuration/opp.properties
+                      sed -i "s/^oppVersion.*/oppVersion=\"${oppVersionNumber}\"/g" /opt/md-container/scripts/configuration/opp.properties
+
+                      # rty
+                      echo 'Cloning md-rty-artemis repository'
+                      pushd /opt
+                        git clone git@bitbucket.org:cr-software/md-rty-artemis.git
+                      popd
+
+                      # Make scripts executable.
+                      find /opt/ -type f -name "*.sh" -exec chmod +x {} \;
+                      find /opt/md-container/scripts/ -type f \( -name "*.sh" -o -name "*.properties" \) -exec dos2unix {} +
+
+                      # Build Base Image
+                      echo 'Building Base Image'
+                      /opt/md-container/scripts/build_image.sh
+
