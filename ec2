@@ -1,32 +1,52 @@
 version: '3'
 services:
-  dm-fit-apps:
-    image: ${DM_ECR_REPO}/dm-fit-apps:${DM_BUILD_TAG}
-    container_name: dm-fit-apps
+  test-tif-apps:
+    image: ${test_ECR_REPO}/test-tif-apps:${test_BUILD_TAG}
+    container_name: test-tif-apps
     ports:
       - 80:80
     volumes:
-      - ${DM_CONTAINER}/logs/fitapps:/usr/local/tomcat/logs
-      - ${DM_CONTAINER}/servers/dm-fit-apps:/usr/share/nginx/servers
+      - ${test_CONTAINER}/logs/tifapps:/usr/local/tomcat/logs
+      - ${test_CONTAINER}/servers/test-tif-apps:/usr/share/nginx/servers
     extra_hosts:
       - host.docker.internal:host-gateway
-  dm-rest:
-    image: ${DM_ECR_REPO}/dm-rest-services:${DM_BUILD_TAG}
-    container_name: dm-rest
+  test-rest:
+    image: ${test_ECR_REPO}/test-rest-services:${test_BUILD_TAG}
+    container_name: test-rest
     environment:
-      - dbhost=${DM_DB_HOST}
-      - dbport=5432
+      - dbhost=${test_DB_HOST}
+      - dbport=123
       - mqhost=host.docker.internal
-      - mqport=61616
-      - tadb=${DM_TA_DB_NAME}
-      - tadbuser=${DM_TA_USERNAME}
-      - tadbpassword=${DM_TA_PASSWORD}
-      - nodename=dm
+      - mqport=123
+      - tadb=${test_TA_DB_NAME}
+      - tadbuser=${test_TA_USERNAME}
+      - tadbpassword=${test_TA_PASSWORD}
+      - nodename=test
       - debug=true
       - ssmregion=${SSMREGION}
       - ssmkeyprefix=${SSMKEYPREFIX}
-      - smartsdecisionservicehost=${SMARTSDECISIONSERVICEHOST}
-      - smartsdecisionmanagerhost=${SMARTSDECISIONMANAGERHOST}
+      - test1sdecisionservicehost=${test1SDECISIONSERVICEHOST}
+      - test1sdecisionmanagerhost=${test1SDECISIONMANAGERHOST}
     volumes:
-      - ${DM_CONTAINER}/logs/rest:/usr/local/tomcat/logs
-      - ${DM_DMFS_FOLDER}:/usr/local/dm
+      - ${test_CONTAINER}/logs/rest:/usr/local/tomcat/logs
+      - ${test_testFS_FOLDER}:/usr/local/test
+  test-ert:
+    image: ${test_ECR_REPO}/test-rest-services:${test_BUILD_TAG}
+    container_name: test-rest
+    environment:
+      - dbhost=${test_DB_HOST}
+      - dbport=123
+      - mqhost=host.docker.internal
+      - mqport=123
+      - tadb=${test_TA_DB_NAME}
+      - tadbuser=${test_TA_USERNAME}
+      - tadbpassword=${test_TA_PASSWORD}
+      - nodename=test
+      - debug=true
+      - ssmregion=${SSMREGION}
+      - ssmkeyprefix=${SSMKEYPREFIX}
+      - test1sdecisionservicehost=${test1SDECISIONSERVICEHOST}
+      - test1sdecisionmanagerhost=${test1SDECISIONMANAGERHOST}
+    volumes:
+      - ${test_CONTAINER}/logs/rest:/usr/local/tomcat/logs
+      - ${test_testFS_FOLDER}:/usr/local/test
