@@ -1,2 +1,1 @@
-Login to test server and Go to /opt/dm-container/docker-compose directory and edit the compose file, in compose file for test-rest and test-batch services set debug=true
-
+navigate to the /ur/local/test/er and edit sr & test-rest files. And check under APPENDERS the level set to be 123 and bottom last root logger set to be 123
