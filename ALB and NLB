@@ -1,174 +1,297 @@
-+ images='23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps
-dm-fit-apps
-23.dkr.ecr.us-east-1.amazonaws.com/dm-qa-postgres-flyway
-23.dkr.ecr.us-east-1.amazonaws.com/dm-prod-postgres-flyway
-23.dkr.ecr.us-east-1.amazonaws.com/dm-batch-services
-dm-batch-services
-23.dkr.ecr.us-east-1.amazonaws.com/dm-rest-services
-dm-rest-services
-23.dkr.ecr.us-east-1.amazonaws.com/dm-file-processor
-dm-file-processor
-23.dkr.ecr.us-east-1.amazonaws.com/dm-blaze-rma
-dm-blaze-rma'
-+ aws ecr get-login-password --region us-east-1
-+ docker login --username AWS --password-stdin 23.dkr.ecr.us-east-1.amazonaws.com
-WARNING! Your password will be stored unencrypted in /var/jenkins/.docker/config.json.
-Configure a credential helper to remove this warning. See
-https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+#!/bin/bash
+################################################################################
+# This script deploys C&RSoftware Debt Manager for JBoss based installs.
+# when it hasn't already happened.  It also provides detailed exit codes should
+# any step fail.
+#
+# Usage Example:
+# ./jboss.sh
+#
+# Valid for OnPrem 13.0 and above.  Updated to handle flyway.
+# No longer supports portal or Oracle DB.
+################################################################################
+# Script Variables
+myFileName=$(basename ${BASH_SOURCE[0]})
+myShortName=${_myFileName%.*}
+scriptVersion=1.0.0
+hasCLIErrors=false
 
-Login Succeeded
-+ echo 'Processing Docker Containers...'
-Processing Docker Containers...
-+ for i in $images
-+ echo 'Push 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-80'
-Push 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-80
-+ echo Pushing 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-80
-Pushing 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-80
-+ docker push 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-80
-The push refers to repository [23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps]
-b8688bef8dfb: Preparing
-f335f69652e2: Preparing
-566c44828c78: Preparing
-c57329ed4b03: Preparing
-b80333d7fdf0: Preparing
-27fa5edd0ecc: Preparing
-5c358863ca61: Preparing
-f655eaf4c0b6: Preparing
-ce495f7b0b7d: Preparing
-9c70f446fbe2: Preparing
-5be225e16e44: Preparing
-3d04ead9b400: Preparing
-af5598fef05f: Preparing
-8fbd5a835e5e: Preparing
-75061be64847: Preparing
-d4fc045c9e3a: Preparing
-f655eaf4c0b6: Waiting
-ce495f7b0b7d: Waiting
-5be225e16e44: Waiting
-3d04ead9b400: Waiting
-af5598fef05f: Waiting
-8fbd5a835e5e: Waiting
-9c70f446fbe2: Waiting
-75061be64847: Waiting
-27fa5edd0ecc: Waiting
-5c358863ca61: Waiting
-566c44828c78: Pushed
-f335f69652e2: Pushed
-b80333d7fdf0: Pushed
-c57329ed4b03: Pushed
-ce495f7b0b7d: Layer already exists
-9c70f446fbe2: Layer already exists
-5be225e16e44: Layer already exists
-3d04ead9b400: Layer already exists
-af5598fef05f: Layer already exists
-8fbd5a835e5e: Layer already exists
-27fa5edd0ecc: Pushed
-5c358863ca61: Pushed
-f655eaf4c0b6: Pushed
-75061be64847: Layer already exists
-d4fc045c9e3a: Layer already exists
-b8688bef8dfb: Pushed
-2025.1.0-80: digest: sha256:b827a19ad6816c6c58898814e3b19afd16da6647891ccd214671ae27346bb244 size: 3651
-++ docker image inspect 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-80
-++ yaml-get -p Id
-++ cut -d: -f2
-+ imageID=382a2d6878f5089b0ca8403c7b14729bbb58d6ef5e77848ec47a46528407900b
-+ docker rmi -f 382a2d6878f5089b0ca8403c7b14729bbb58d6ef5e77848ec47a46528407900b
-Untagged: 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-80
-Untagged: 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps@sha256:b827a19ad6816c6c58898814e3b19afd16da6647891ccd214671ae27346bb244
-Untagged: dm-fit-apps:2025.1.0-80
-Deleted: sha256:382a2d6878f5089b0ca8403c7b14729bbb58d6ef5e77848ec47a46528407900b
-+ echo 'Delete 382a2d6878f5089b0ca8403c7b14729bbb58d6ef5e77848ec47a46528407900b'
-Delete 382a2d6878f5089b0ca8403c7b14729bbb58d6ef5e77848ec47a46528407900b
-+ for i in $images
-+ echo 'Push dm-fit-apps:2025.1.0-80'
-Push dm-fit-apps:2025.1.0-80
-+ echo Pushing dm-fit-apps:2025.1.0-80
-Pushing dm-fit-apps:2025.1.0-80
-+ docker push dm-fit-apps:2025.1.0-80
-The push refers to repository [docker.io/library/dm-fit-apps]
-An image does not exist locally with the tag: dm-fit-apps
-==================================================================================
-+ images='23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps
-dm-fit-apps
-23.dkr.ecr.us-east-1.amazonaws.com/dm-qa-postgres-flyway
-23.dkr.ecr.us-east-1.amazonaws.com/dm-prod-postgres-flyway'
-+ aws ecr get-login-password --region us-east-1
-+ docker login --username AWS --password-stdin 23.dkr.ecr.us-east-1.amazonaws.com
-WARNING! Your password will be stored unencrypted in /var/jenkins/.docker/config.json.
-Configure a credential helper to remove this warning. See
-https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+# Template Variables
+# Implemented: debtmanager_version, database_server, multiByte, rules_type, upgrade_type
+# Future: carte_ip, carte_port, etl_path
 
-Login Succeeded
-+ echo 'Processing Docker Containers...'
-Processing Docker Containers...
-+ for i in $images
-+ echo 'Push 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-81'
-Push 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-81
-+ echo Pushing 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-81
-Pushing 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-81
-+ docker push 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-81
-The push refers to repository [23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps]
-3e7013b97420: Preparing
-f335f69652e2: Preparing
-566c44828c78: Preparing
-c57329ed4b03: Preparing
-b80333d7fdf0: Preparing
-27fa5edd0ecc: Preparing
-5c358863ca61: Preparing
-f655eaf4c0b6: Preparing
-ce495f7b0b7d: Preparing
-9c70f446fbe2: Preparing
-5be225e16e44: Preparing
-3d04ead9b400: Preparing
-af5598fef05f: Preparing
-8fbd5a835e5e: Preparing
-75061be64847: Preparing
-27fa5edd0ecc: Waiting
-d4fc045c9e3a: Preparing
-5c358863ca61: Waiting
-f655eaf4c0b6: Waiting
-af5598fef05f: Waiting
-8fbd5a835e5e: Waiting
-ce495f7b0b7d: Waiting
-75061be64847: Waiting
-9c70f446fbe2: Waiting
-d4fc045c9e3a: Waiting
-3d04ead9b400: Waiting
-5be225e16e44: Waiting
-b80333d7fdf0: Layer already exists
-f335f69652e2: Layer already exists
-c57329ed4b03: Layer already exists
-566c44828c78: Layer already exists
-27fa5edd0ecc: Layer already exists
-5c358863ca61: Layer already exists
-ce495f7b0b7d: Layer already exists
-f655eaf4c0b6: Layer already exists
-9c70f446fbe2: Layer already exists
-5be225e16e44: Layer already exists
-3d04ead9b400: Layer already exists
-af5598fef05f: Layer already exists
-8fbd5a835e5e: Layer already exists
-75061be64847: Layer already exists
-d4fc045c9e3a: Layer already exists
-3e7013b97420: Pushed
-2025.1.0-81: digest: sha256:f8935c1e4e2b9b711092c4f0bf97cc724bcd5ced58fbfd9460105484ab1cc179 size: 3651
-++ docker image inspect 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-81
-++ yaml-get -p Id
-++ cut -d: -f2
-+ imageID=0703dc4907d3f4789de25ac493be2ba45355ea512841589110ebe0c11d55efe7
-+ docker rmi -f 0703dc4907d3f4789de25ac493be2ba45355ea512841589110ebe0c11d55efe7
-Untagged: 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps:2025.1.0-81
-Untagged: 23.dkr.ecr.us-east-1.amazonaws.com/dm-fit-apps@sha256:f8935c1e4e2b9b711092c4f0bf97cc724bcd5ced58fbfd9460105484ab1cc179
-Untagged: dm-fit-apps:2025.1.0-81
-Deleted: sha256:0703dc4907d3f4789de25ac493be2ba45355ea512841589110ebe0c11d55efe7
-+ echo 'Delete 0703dc4907d3f4789de25ac493be2ba45355ea512841589110ebe0c11d55efe7'
-Delete 0703dc4907d3f4789de25ac493be2ba45355ea512841589110ebe0c11d55efe7
-+ for i in $images
-+ echo 'Push dm-fit-apps:2025.1.0-81'
-Push dm-fit-apps:2025.1.0-81
-+ echo Pushing dm-fit-apps:2025.1.0-81
-Pushing dm-fit-apps:2025.1.0-81
-+ docker push dm-fit-apps:2025.1.0-81
-The push refers to repository [docker.io/library/dm-fit-apps]
-tag does not exist: dm-fit-apps:2025.1.0-81
+while [ $# -ne 0 ]; do
+	case $1 in
+		# The Debt Manager version to be installed.
+		-v|--debtmanager_version)
+			if [ -z "$2" ]; then
+				hasCLIErrors=true
+				echo "ERROR:  Debt Manager version must be provided.  See --help for more information." >&2
+			else
+				debtManagerVersion=$2
+				shift
+			fi
+		;;
+
+		# The database server name to be used when pulling the secret from secrets manager. devops/cicd/db/<name>/credentials
+		-d|--database_server)
+			if [ -z "$2" ]; then
+				hasCLIErrors=true
+				echo "ERROR:  Database server name must be provided.  See --help for more information." >&2
+			else
+				databaseServerShortName=$2
+				shift
+			fi
+		;;
+
+		# How the database/rules are to be handled. [ create, rebuild, update, nothing ].
+		#  - ANT: To maintain backward compatability with older scripts.
+		#      - Database will be created/recreated and populated with ANT build QA data.  Rules will be (re)built.
+		#      - Older scripts key off of ANT or not.  So anything that isn't ANT is treated like "nothing" below.
+		#  - UPGRADE: To maintain backward compatibility with older scripts.a
+		#  - create: Database will be (re)created and populated with flywaymigrate QA data.  Rules will be (re)built.
+		#  - rebuild: Same actions as create.
+		#  - update: Database will be updated with flywaymigrate QA data.  Rules will be left alone.
+		#  - nothing: No actions will be taken for DB or Rules.
+		-u|--upgrade_type)
+			if [ -z "$2" ]; then
+				hasCLIErrors=true
+				echo "ERROR: An Upgrade type must be provided.  See --help for more information." >&2
+			else
+				upgradeType=${2}
+				if ! [[ "$upgradeType" =~ ^(ANT|UPGRADE|create|rebuild|update|nothing)$ ]]; then
+					hasCLIErrors=true
+					echo "ERROR: Invalid upgrade type. See --help for more information." >&2
+				fi
+				shift
+			fi
+		;;
+
+		# The multibyte flag for SQLSERVER deployments.
+		-m|--multiByte)
+			if [ -z "$2" ]; then
+				hasCLIErrors=true
+				echo "ERROR:  Multibyte value must be provided.  See --help for more information." >&2
+			else
+				multiByte=$2
+				shift
+			fi
+		;;
+
+		# The type of rules to be used.  BLAZE or DROOLS.
+		-r|--rules_type)
+			if [ -z "$2" ]; then
+				hasCLIErrors=true
+				echo "ERROR: Rules type must be provided.  See --help for more information." >&2
+			else
+				rulesType=$2
+				shift
+			fi
+		;;
+
+		# Help
+		-h|--help)
+			cat <<EOHELP
+Usage:
+${_myShortName} [-v] [-d] [-u] \\
+    [-v DebtManager Version] \\
+    [-d Database Server Short Name] \\
+    [-u Upgrade Type]
+OR
+${_myShortName} [--help] [--debtmanager_version] [--database_server] [--upgrade_type] \\
+    [--debtmanager_version R11.X.X.X.X.X] \\
+    [--database_server msdba] \\
+    [--upgrade_type create, rebuild, update, nothing ]
+
+Where:
+    -h, --help              	Display this help text and quit.
+    -v, --debtmanager_version   The version of Debt Manager to be installed.
+								DM-R11.X.X.X.X.X
+    -d, --database_server BLAZE_DIR
+                            The directory -- usually on a shared file-system
+                            mount -- into which Blaze repository is to be
+                            installed.
+    -o, --owner JBOSS_OWNER The user which will own the Blaze repository files;
+                            default:  jboss.
+    -g, --group JBOSS_GROUP The group which will own the Blaze repository files;
+                            default:  jboss.
+    -u, --upgrade_type      How the database/rules are to be handled.
+							create - Cleans and or creates database and runs flywaymigrate QA data.  (Re)builds rules.
+							rebuild - Same actions as create.
+							update - Updates database with flywaymigrate seed data. No action taken for Rules.
+							nothing - No actions are taken for DB or Rules.
+
+Ownership of BLAZE_DIR files is not verified by --noop.
+
+Exit States:
+  When --noop is set:
+    0:  BLAZE_DIR exists and is populated.
+    1:  One or more command-line arguments are missing or invalid.
+    2:  BLAZE_DIR is missing or is empty.
+    3:  Unable to create or enter BLAZE_DIR.
+    4:  Unable to copy files into BLAZE_DIR.
+
+Version: ${_scriptVersion}
+EOHELP
+			exit 0
+		;;
+    #Commented out due to error in jboss type deployments
+		# Check for unknown arguments
+		*)
+			#hasCLIErrors=true
+			#echo "ERROR:  Unknown option: ${1}.  See --help for more information." >&2
+		;;
+	esac
+	shift
+done
+
+if $hasCLIErrors; then
+	exit 1
+fi
+
+# Secrets Manager Variables
+dbInfo=$(aws secretsmanager get-secret-value --secret-id devops/cicd/db/${databaseServerShortName}/credentials | yaml-get -p SecretString)
+databaseUser=$(echo $dbInfo | yaml-get -p username)
+databaseUserPassword=$(echo $dbInfo | yaml-get -p password)
+databaseType=$(echo $dbInfo | yaml-get -p engine | tr '[:lower:]' '[:upper:]')
+databaseServer=$(echo $dbInfo | yaml-get -p host)
+databasePort=$(echo $dbInfo | yaml-get -p port)
+
+# Hostname
+serverName=$(hostname)
+sed -i '/update_hostname/d;/set_hostname/d;/ssh_pwauth/a preserve_hostname: true' /etc/cloud/cloud.cfg
+sed -i "/127.0.0.1/ s/$/ $serverName/g" /etc/hosts
+
+# Users
+useradd -m cm
+echo "cm:root1234@" | chpasswd
+echo "cm        ALL=(ALL)       NOPASSWD: ALL" >> /etc/sudoers
+
+# Install SQLCMD
+/ConfigurationManagement/maint/scripts/components/install_sqlcmd.sh
+
+#Installing JAVA
+yum install -y java-1.8.0-openjdk-1.8.0.432*
+
+# Install Docker
+/ConfigurationManagement/maint/scripts/components/install_docker.sh
+
+#Installing Merchant-ORCC Certificiate
+echo yes | keytool -import -alias networksolutionsevserverca -keystore /etc/pki/java/cacerts  -storepass changeit -file /ConfigurationManagement/Certs/NetworkSolutionsCertificateAuthority.crt
+
+#Prepping JBOSS
+cd /
+mkdir jboss-eap
+chown -R cm:cm /jboss-eap
+cd /home/cm
+ln -s /ConfigurationManagement/maint/scripts/Maintain64.sh
+chmod +x Maintain64.sh
+echo "alias maint='cd /home/cm;./Maintain64.sh'" >> /home/cm/.bashrc
+echo -e "JBOSS_HOME=/jboss-eap
+UPGRADE_DIR=/ConfigurationManagement/DailyBuilds
+SETUP_FILES=/ConfigurationManagement/maint
+APACHE_HTDOCS=/apps/Apache/htdocs" > /home/cm/maint.properties
+chown cm:cm /home/cm/maint.properties
+
+#Installing Apache
+echo "debtmanager_version: ${debtManagerVersion}
+database_type: ${databaseType}" > /tmp/env_props.yaml
+/ConfigurationManagement/maint/scripts/components/install_apache.sh
+
+#Installing Cups-PDF
+#/ConfigurationManagement/maint/scripts/components/install_cups.sh
+
+#Required for QA Selenium Automation Testing
+#/ConfigurationManagement/maint/scripts/components/install_selenium.sh
+
+# Installing Open API Spec and Swagger UI (For Daily Builds Only)
+mkdir -p /apps/Apache/htdocs/dm-rest-api
+cd /apps/Apache/htdocs/dm-rest-api
+
+dmZipName=${debtManagerVersion}-${databaseType}
+if [ ! -f /ConfigurationManagement/DailyBuilds/${debtManagerVersion}/${dmZipName}.zip ]; then
+	dmZipName=${debtManagerVersion}-JBOSS
+fi
+unzip -j "/ConfigurationManagement/DailyBuilds/${debtManagerVersion}/${dmZipName}.zip" "${dmZipName}/resource/dm-rest-api-openapi-spec-DM-R*.zip" -d .
+unzip dm-rest-api-openapi-spec-DM-R*.zip
+
+ln -s dm-rest-api-openapi-specification-DM-R*.yaml dm-rest-api-openapi-specification.yaml
+unzip dm-rest-api-samples-DM-R*.zip
+rm -Rf dm-rest-api-samples-DM-R*.zip
+mv dm-rest-api-openapi-specification-DM-R*.yaml dm-rest-api-openapi-specification.yaml
+cd ..
+unzip /ConfigurationManagement/InfrastructurePackages/SwaggerUI/swagger-ui*.zip
+mv swagger-ui-* swagger-ui
+chown -R cm:cm swagger-ui dm-rest-api
+
+sed -i "s|https://petstore.swagger.io/v2/swagger.json|http://${serverName}.dm.crsdev.com/dm-rest-api/dm-rest-api-openapi-specification.yaml|g" swagger-ui/index.html
+
+#Installing OpenOffice
+source /ConfigurationManagement/maint/scripts/components/install_openoffice.sh
+
+#Variables
+DIRECTORY=$(echo $serverName | tr '[:upper:]' '[:lower:]')
+SERVER_IP=$(ip a | grep inet | grep eth0 | awk -F' ' '{print $2}' | awk -F'/' '{print $1}')
+dmfsDirectory="/usr/local/dm"
+
+
+# Fresh Configuration Every Time
+
+if [ ! -d "${dmfsDirectory}" ]; then
+	echo "DMFS does not exist yet"
+	mkdir -p "${dmfsDirectory}"
+	chown -R cm:cm "${dmfsDirectory}"
+else
+	if [ "$upgrade_type" == "ANT" ]; then
+	    echo "Cleaning DMFS for ANT build"
+		rm -Rf "${dmfsDirectory}"/dmfs/config/*
+		rm -Rf "${dmfsDirectory}"/dmfs/jacoco/*
+		rm -Rf "${dmfsDirectory}"/dmfs/dm-blaze
+	else
+		echo "Using Existing DMFS"
+	fi
+fi
+
+#Installing DebtManager
+echo -e "DIRECTORY=$DIRECTORY
+# PORTAL (YES|NO)
+PORTAL=NO
+# RTYPE (DROOLS|BLAZE)
+RTYPE=$rulesType
+# DBSERVER
+DBSERVER=$databaseServer
+# DBTYPE (SQLSERVER|ORACLE|POSTGRES)
+DBTYPE=$databaseType
+# MULTIBYTE (YES|NO)
+MULTIBYTE=$multiByte
+# ENV_TYPE (ANT|UPGRADE)
+ENV_TYPE=$upgradeType" > /home/cm/jenkinsautoinstall
+
+# Install DebtManager
+sudo -H -u cm bash -c "cd ~;./Maintain64.sh AUTO $debtManagerVersion"
+
+#Installing DMPS Certificate
+echo "alias refreshcert=/ConfigurationManagement/maint/scripts/tools/refreshcert.sh" >> ~/.bashrc; source ~/.bashrc
+/ConfigurationManagement/maint/scripts/tools/refreshcert.sh
+
+# Configuring DMPS Integration And Carte Properties
+# echo -e "titanium.streaming.host.name=dmps_ip
+# titanium.arevent.data.streaming.url=https://dmps_ip:8443/dmip-gw/dmip/data-receiver/AREventTopic?create=true&partition=1
+# titanium.financial.transaction.data.streaming.url=https://dmps_ip:8443/dmip-gw/dmip/data-receiver/FinancialTransactionTopic?create=true&partition=1
+# titanium.dialer.data.streaming.url=https://dmps_ip:8443/dmip-gw/data-receiver/DialerTopic?create=true&partition=1
+# titanium.streaming.path.root=https://dmps_ip:8443/dmip-gw/custom_login.jsp
+# titanium.etl.kettle.carte.url=http://$carte_ip:$carte_port/kettle
+# titanium.etl.kettle.job.path=$etl_path/standard-PDI/" >> /jboss-eap/$DIRECTORY/domain/main/dm-env-override.properties
+
+#Configure for Okta
+#/ConfigurationManagement/maint/scripts/components/configure_okta.sh $DIRECTORY $databaseServer
+
+# Permissions
+chown -R cm:cm /jboss-eap/$DIRECTORY
+chmod -R 777 /usr/local/dm/
+#Enabling Data Streaming In Database
+/opt/mssql-tools/bin/sqlcmd -S $databaseServer -U $databaseUser -P $databaseUserPassword -Q "use ${serverName}_oltp ;update agncy_Config set agncy_config_item_crrnt_val_txt = 'Y' where config_Item_id in (select config_Item_id from config_Item where config_item_rsrc_ky_txt = 'config.agency.stream.data.message.key');"
+
+# Start DebtManager
+cd /jboss-eap/$DIRECTORY/bin/
+sudo -H -u cm bash -c './START_DM_Host_Controller.sh &'
