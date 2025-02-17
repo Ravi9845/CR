@@ -1,3 +1,5 @@
+ssh -A -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null jenkins@${nodeip} <<EOF
+									/${script_dir}/pull-latest-code.sh
 + ssh -A -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null jenkins@10.100.19.227
 Warning: Permanently added '10.100.19.227' (ECDSA) to the list of known hosts.
 Agent pid 4774
