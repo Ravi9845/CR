@@ -1,2 +1,9 @@
++ ssh -A -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null jenkins@10.100.19.227
 Warning: Permanently added '10.100.19.227' (ECDSA) to the list of known hosts.
 jenkins@10.100.19.227: Permission denied (publickey,gssapi-keyex,gssapi-with-mic).
+[Pipeline] }
+$ ssh-agent -k
+unset SSH_AUTH_SOCK;
+unset SSH_AGENT_PID;
+echo Agent pid 191 killed;
+[ssh-agent] Stopped.
