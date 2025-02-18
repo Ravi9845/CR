@@ -1,9 +1,37 @@
-+ ssh -A -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null jenkins@10.100.19.227
-Warning: Permanently added '10.100.19.227' (ECDSA) to the list of known hosts.
-jenkins@10.100.19.227: Permission denied (publickey,gssapi-keyex,gssapi-with-mic).
-[Pipeline] }
-$ ssh-agent -k
-unset SSH_AUTH_SOCK;
-unset SSH_AGENT_PID;
-echo Agent pid 191 killed;
-[ssh-agent] Stopped.
+Running ssh-add (command line suppressed)
+Identity added: /home/jenkins/workspace/Ams/DMSmarts-Components/FitLogic-Deployment/DeployPrimaryReplica@tmp/private_key_1352036715960387009.key (ML_DevOps_CICDCM@crsoftware.com)
+[ssh-agent] Started.
+[Pipeline] {
+[Pipeline] sh
++ ssh -A -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null jenkins@10.100.19.215
+Warning: Permanently added '10.100.19.215' (ECDSA) to the list of known hosts.
+Agent pid 1028
+Identity added: /home/jenkins/.ssh/git-identity-1014-20814 (ML_Jenkins_DM@crsoftware.com)
+touch: cannot touch ‘/etc/ssh/ssh_known_hosts’: Permission denied
+tee: /etc/ssh/ssh_known_hosts: Permission denied
+tee: /etc/ssh/ssh_known_hosts: Permission denied
+values template file - smarts-primary-replica-values-282.yaml
+values output file - smarts-rc1-primary-replica-values-282.yaml
+Error: Kubernetes cluster unreachable: Get "http://localhost:8080/version": dial tcp 127.0.0.1:8080: connect: connection refused
+E0218 10:34:58.135485    1533 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
+E0218 10:34:58.136053    1533 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
+E0218 10:34:58.137498    1533 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
+E0218 10:34:58.137716    1533 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
+E0218 10:34:58.139020    1533 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
+The connection to the server localhost:8080 was refused - did you specify the right host or port?
+The connection to the server localhost:8080 was refused - did you specify the right host or port?
+ *****************   Target group bindings applied successfully.   *****************
+
+The connection to the server localhost:8080 was refused - did you specify the right host or port?
+
+ *****************   Persistent Volume Claim 'smarts-rc1-repo-backup-pvc' applied successfully.   *******************
+
+Test -> pvc section ends here
+
+E0218 10:34:58.429810    1562 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
+E0218 10:34:58.430132    1562 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
+E0218 10:34:58.431951    1562 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
+E0218 10:34:58.432182    1562 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
+E0218 10:34:58.433495    1562 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
+The connection to the server localhost:8080 was refused - did you specify the right host or port?
+ ********************* Deployment ends here *****************************
