@@ -1,0 +1,104 @@
+
+1. install ingress controller https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html
+2. configure route 53 domain name for graphana and prometheus
+3. configure ingress
+4. we have 1 alb for graphana and prometheus 
+It will create ALB,targetgroup,listetner 
+note
+target port = container port
+only port is a service port (expose outside)
+in eks worker node add ports of graphana and prometheus pods
+in alb security group add 443 or 80 to all
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:775302213214:certificate/b8c22b87-a030-43dc-a7e8-dd8fca6762ed
+    alb.ingress.kubernetes.io/group.name: smarts-alb
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-Ext-2018-06
+    alb.ingress.kubernetes.io/success-codes: 200,302
+    alb.ingress.kubernetes.io/target-type: ip
+    kubernetes.io/ingress.class: alb
+    meta.helm.sh/release-name: smarts-monitoring
+    meta.helm.sh/release-namespace: smarts-monitoring
+  creationTimestamp: "2024-05-24T14:23:19Z"
+  finalizers:
+  - group.ingress.k8s.aws/smarts-alb
+  generation: 1
+  labels:
+    app.kubernetes.io/instance: smarts-monitoring
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/version: 10.4.1
+    helm.sh/chart: grafana-7.3.11
+  name: smarts-monitoring-grafana
+  namespace: smarts-monitoring
+  resourceVersion: "6179836"
+  uid: b4c2b831-45de-4d09-a4ad-0d347b1510c6
+spec:
+  rules:
+  - host: grafana.rc1.smarts.crsoftwarecloud.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: smarts-monitoring-grafana
+            port:
+              number: 80 (service port)
+        path: /
+        pathType: Prefix
+status:
+  loadBalancer:
+    ingress:
+    - hostname: k8s-smartsalb-7ab25afa78-749893904.us-east-1.elb.amazonaws.com
+
+=============================================================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:775302213214:certificate/b8c22b87-a030-43dc-a7e8-dd8fca6762ed
+    alb.ingress.kubernetes.io/group.name: smarts-alb
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-Ext-2018-06
+    alb.ingress.kubernetes.io/success-codes: 200,302
+    alb.ingress.kubernetes.io/target-type: ip
+    kubernetes.io/ingress.class: alb
+    meta.helm.sh/release-name: smarts-monitoring
+    meta.helm.sh/release-namespace: smarts-monitoring
+  creationTimestamp: "2024-05-24T14:23:20Z"
+  finalizers:
+  - group.ingress.k8s.aws/smarts-alb
+  generation: 1
+  labels:
+    app: kube-prometheus-stack-prometheus
+    app.kubernetes.io/instance: smarts-monitoring
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    app.kubernetes.io/version: 58.7.2
+    chart: kube-prometheus-stack-58.7.2
+    heritage: Helm
+    release: smarts-monitoring
+  name: smarts-monitoring-kube-pro-prometheus
+  namespace: smarts-monitoring
+  resourceVersion: "6179865"
+  uid: 767e7587-5dec-4a9d-bb4d-c3cabfccebb5
+spec:
+  rules:
+  - host: prometheus.rc1.smarts.crsoftwarecloud.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: smarts-monitoring-kube-pro-prometheus
+            port:
+              number: 9090
+        path: /
+        pathType: ImplementationSpecific
+status:
+  loadBalancer:
+    ingress:
+    - hostname: k8s-smartsalb-7ab25afa78-749893904.us-east-1.elb.amazonaws.com
