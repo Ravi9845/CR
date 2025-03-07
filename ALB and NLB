@@ -22,33 +22,31 @@ switch (LZ) {
     extension = '.com'
     heap_size = '4096m'
     memory = '6144'
-
-    // Set health check values based on STAGE
-    if (STAGE == 'RC1') {
-        def_HealthCheckTimeout = 2
-        def_HealthCheckInterval = 3
-    } else {
-        def_HealthCheckTimeout = 4
-        def_HealthCheckInterval = 5
-    }
-
-    if (STAGE == 'CQA') {
-      if (Namespace == 'migration') {
+    if (STAGE=='CQA'){
+      if (Namespace == 'migration'){
           def_min = "3"
           def_max = "4"
-      } else {
+      }else{
           def_min = "2"
           def_max = "4"
       }
       DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
-    } else if (STAGE == 'PRD') {
+    }else if (STAGE=='PRD'){
       def_min = "2"
       def_max = "4"
       DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
-    } else {
+    }else if (STAGE=='RC1'){
+      def_min = "2"
+      def_max = "4"
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      def_HealthCheckTimeout = 2
+      def_HealthCheckInterval = 3
+    }else{
       def_min = "2"
       def_max = "4"
       DefaultVersion = 'DM-R11.3.0.1.4.7-arm64'
+      def_HealthCheckTimeout = 4
+      def_HealthCheckInterval = 5
     }
     break
 
@@ -57,93 +55,131 @@ switch (LZ) {
     server_tag = 'd-server-00r6ki3rcdw9e3'
     heap_size = '4096m'
     memory = '6144'
-    
-    def_HealthCheckTimeout = 4
-    def_HealthCheckInterval = 5
-    
-    if (STAGE == 'CQA') {
-      if (Namespace == 'migration') {
+    if (STAGE=='CQA'){
+     if (Namespace == 'migration'){
         def_min = "0"
         def_max = "0"
-      } else {
+      }else{
         def_min = "2"
         def_max = "4"
       }
       DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
-    } else if (STAGE == 'PRD') {
-      if (Namespace == 'migration') {
+    }else if (STAGE=='PRD'){
+      if (Namespace == 'migration'){
         def_min = "1"
         def_max = "1"
-      } else {
+      }else{
         def_min = "2"
         def_max = "4"
       }
       DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
-    } else {
+    }else{
       def_min = "2"
       def_max = "4"
       DefaultVersion = 'DM-R11.3.0.1.4.7-arm64'
     }
+    def_HealthCheckTimeout = 4
+    def_HealthCheckInterval = 5
     break
 
-  // The same logic is applied for other regions...
+  case 'European_Union':
+    server_tag = 'd-server-02npce8a7tb1j0'
+    extension = '.eu'
+    def_min = "2"
+    def_max = "4"
+    if (STAGE=='CQA'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '4096m'
+      memory = '6144'
+    }else if (STAGE=='PRD'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '5120m'
+      memory = '8192'
+    }else{
+      DefaultVersion = 'DM-R11.3.0.1.4.7-arm64'
+    }
+    def_HealthCheckTimeout = 4
+    def_HealthCheckInterval = 5
+    break
+
+  case 'Sydney':
+    server_tag = ' '
+    extension = '.au'
+    def_min = "2"
+    def_max = "4"
+    if (STAGE=='CQA'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '4096m'
+      memory = '6144'
+    }else if (STAGE=='PRD'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '5120m'
+      memory = '8192'
+    }else{
+      DefaultVersion = 'DM-R11.3.0.1.4.7-arm64'
+    }
+    def_HealthCheckTimeout = 4
+    def_HealthCheckInterval = 5
+    break
+
+  case 'CapeTown':
+    server_tag = ' '
+    extension = '.co.za'
+    def_min = "2"
+    def_max = "4"
+    if (STAGE=='CQA'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '4096m'
+      memory = '6144'
+    }else if (STAGE=='PRD'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '5120m'
+      memory = '8192'
+    }else{
+      DefaultVersion = 'DM-R11.3.0.1.4.7-arm64'
+    }
+    def_HealthCheckTimeout = 4
+    def_HealthCheckInterval = 5
+    break
 }
 
-// Setting default domain
-if (STAGE != "PRD") {
+if (STAGE !="PRD"){
     default_domain = "${STAGE.toLowerCase()}.debtmanager.crsoftwarecloud${extension}"
-} else {
+}
+else{
     default_domain = "debtmanager.crsoftwarecloud${extension}"
 }
 
-// Setting Rest API Target Group ARN
-if (RegionHasPrivateLinkEnabled != 'No') {
-    RestAPITgArn = "Please populate target group arn for dm-restapi-pvtlink-tg"
-} else {
-    RestAPITgArn = "This field is not relevant when RegionHasPrivateLinkEnabled is No"
+if (RegionHasPrivateLinkEnabled != 'No'){
+    RestAPITgArn= "Please populate target group arn for dm-restapi-pvtlink-tg"
+}
+else{
+    RestAPITgArn= "This field is not relevant when RegionHasPrivateLinkEnabled is No"
 }
 
 if (Action != 'Delete') {
   param_map = [
-    ["parameter": "MaxCapacity", "default_value": "${def_max}"],
-    ["parameter": "MinCapacity", "default_value": "${def_min}"],
-    ["parameter": "DBHostName", "default_value": "db.${default_domain}"],
-    ["parameter": "AmqHostName", "default_value": "amq.${default_domain}"],
-    ["parameter": "ContainerCpu", "default_value": "4096"],
-    ["parameter": "ContainerMemory", "default_value": "${memory}"],
-    ["parameter": "JavaHeapSize", "default_value": "${heap_size}"],
+    ["parameter": "MaxCapacity", "default_value":"${def_max}"],
+    ["parameter": "MinCapacity", "default_value":"${def_min}"],
+    ["parameter": "DBHostName", "default_value":"db.${default_domain}"],
+    ["parameter": "AmqHostName","default_value":"amq.${default_domain}"],
+    ["parameter": "ContainerCpu","default_value":"4096"],
+    ["parameter": "ContainerMemory","default_value":"${memory}"],
+    ["parameter": "JavaHeapSize","default_value":"${heap_size}"],
     ["parameter": "ImageName", "default_value": "${DefaultVersion}"],
-    ["parameter": "Namespace", "default_value": "${Namespace}"],
+    ["parameter": "Namespace", "default_value":"${Namespace}"],
     ["parameter": "AppName", "default_value": "RestAPI"],
     ["parameter": "AppId", "default_value": "dm-${AWS_DEPLOYMENT_REGION}-001"],
     ["parameter": "CostCenter", "default_value": "dm-${STAGE.toLowerCase()}"],
-    ["parameter": "Creator", "default_value": "TBD"],
-    ["parameter": "UpdatePvtLinkTG", "default_value": "${RegionHasPrivateLinkEnabled}"],
-    ["parameter": "DMRestAPIPvtLinkTGARN", "default_value": "${RestAPITgArn}"],
-    ["parameter": "Owner", "default_value": "TBD"],
+    ["parameter": "Creator", "default_value":"TBD"],
+    ["parameter": "UpdatePvtLinkTG", "default_value":"${RegionHasPrivateLinkEnabled}"],
+    ["parameter": "DMRestAPIPvtLinkTGARN", "default_value":"${RestAPITgArn}"],
+    ["parameter": "Owner", "default_value":"TBD"],
     ["parameter": "Type", "default_value": stage_tag],
-    ["parameter": "HealthCheckTimeout", "default_value": "${def_HealthCheckTimeout}"],  // Added
-    ["parameter": "HealthCheckInterval", "default_value": "${def_HealthCheckInterval}"]  // Added
+    ["parameter": "HealthCheckTimeout", "default_value": "${def_HealthCheckTimeout}"],
+    ["parameter": "HealthCheckInterval", "default_value": "${def_HealthCheckInterval}"]
   ]
-
-  html_to_be_rendered = "<table><tr>"
-  param_list = param_map
-  param_list.each { action ->
-    html_to_be_rendered = """
-      ${html_to_be_rendered}
-      <tr>
-      <td>
-      <label title=\"${action.parameter}\" class=\" \">${action.parameter}</label>
-      <input type=\"hidden\" class=\" \" name=\"value\" value=${action.parameter}>
-      </td>
-      <td>
-      <input type=\"text\" class=\" \"  size=\"50\" name=\"value\" value=\"${action.default_value}\" > </br>
-      </td>
-      </tr>
-    """
-  }
-  html_to_be_rendered = "${html_to_be_rendered}</tr></table>"
-  return html_to_be_rendered
-} else {
+}
+else {
   return "No RFC Information required for Delete Action"
 }
