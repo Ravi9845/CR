@@ -1,3 +1,28 @@
+html_to_be_rendered = """
+  <table border="1" style="border-collapse: collapse; width: 100%;">
+  <tr>
+    <th>Parameter</th>
+    <th>Value</th>
+  </tr>
+"""
+
+param_list = param_map
+param_list.each { action ->
+  html_to_be_rendered = """
+    ${html_to_be_rendered}
+    <tr>
+      <td style="padding: 8px; border: 1px solid black;">${action.parameter}</td>
+      <td style="padding: 8px; border: 1px solid black;">
+        <input type="text" size="50" name="value" value="${action.default_value}">
+      </td>
+    </tr>
+  """
+}
+
+html_to_be_rendered = "${html_to_be_rendered}</table>"
+
+return html_to_be_rendered
+
 switch (STAGE) {
   case 'DEV':
     stage_tag = 'Development'
