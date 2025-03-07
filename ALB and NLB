@@ -1,37 +1,177 @@
-Running ssh-add (command line suppressed)
-Identity added: /home/jenkins/workspace/Ams/DMSmarts-Components/FitLogic-Deployment/DeployPrimaryReplica@tmp/private_key_1352036715960387009.key (ML_DevOps_CICDCM@crsoftware.com)
-[ssh-agent] Started.
-[Pipeline] {
-[Pipeline] sh
-+ ssh -A -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null jenkins@10.100.19.215
-Warning: Permanently added '10.100.19.215' (ECDSA) to the list of known hosts.
-Agent pid 1028
-Identity added: /home/jenkins/.ssh/git-identity-1014-20814 (ML_Jenkins_DM@crsoftware.com)
-touch: cannot touch ‘/etc/ssh/ssh_known_hosts’: Permission denied
-tee: /etc/ssh/ssh_known_hosts: Permission denied
-tee: /etc/ssh/ssh_known_hosts: Permission denied
-values template file - smarts-primary-replica-values-282.yaml
-values output file - smarts-rc1-primary-replica-values-282.yaml
-Error: Kubernetes cluster unreachable: Get "http://localhost:8080/version": dial tcp 127.0.0.1:8080: connect: connection refused
-E0218 10:34:58.135485    1533 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
-E0218 10:34:58.136053    1533 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
-E0218 10:34:58.137498    1533 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
-E0218 10:34:58.137716    1533 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
-E0218 10:34:58.139020    1533 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
-The connection to the server localhost:8080 was refused - did you specify the right host or port?
-The connection to the server localhost:8080 was refused - did you specify the right host or port?
- *****************   Target group bindings applied successfully.   *****************
-
-The connection to the server localhost:8080 was refused - did you specify the right host or port?
-
- *****************   Persistent Volume Claim 'smarts-rc1-repo-backup-pvc' applied successfully.   *******************
-
-Test -> pvc section ends here
-
-E0218 10:34:58.429810    1562 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
-E0218 10:34:58.430132    1562 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
-E0218 10:34:58.431951    1562 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
-E0218 10:34:58.432182    1562 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
-E0218 10:34:58.433495    1562 memcache.go:265] couldn't get current server API group list: Get "http://localhost:8080/api?timeout=32s": dial tcp 127.0.0.1:8080: connect: connection refused
-The connection to the server localhost:8080 was refused - did you specify the right host or port?
- ********************* Deployment ends here *****************************
+switch (STAGE) {
+  case 'DEV':
+    stage_tag = 'Development'
+    break
+  case 'RC1':
+    stage_tag = 'RC1'
+    break
+  case 'CQA':
+    stage_tag = 'CQA'
+    break
+  case 'PRD':
+    stage_tag = 'Production'
+    break
+  case 'NTWKSVC':
+    stage_tag = 'Production'
+    break
+}
+switch (LZ) {
+  case 'United_States':
+    server_tag = 'd-server-02542pedsm3j3j'
+    extension = '.com'
+    heap_size = '4096m'
+    memory = '6144'
+    if (STAGE=='CQA'){
+      if (Namespace == 'migration'){
+          def_min = "3"
+          def_max = "4"
+      }else{
+          def_min = "2"
+          def_max = "4"
+      }
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+    }else if (STAGE=='PRD'){
+      def_min = "2"
+      def_max = "4"
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+    }else{
+      def_min = "2"
+      def_max = "4"
+      DefaultVersion = 'DM-R11.3.0.1.4.7-arm64'
+    }
+    break
+  case 'London':
+    extension = '.co.uk'
+    server_tag = 'd-server-00r6ki3rcdw9e3'
+    heap_size = '4096m'
+    memory = '6144'
+    if (STAGE=='CQA'){
+     if (Namespace == 'migration'){
+        def_min = "0"
+        def_max = "0"
+      }else{
+        def_min = "2"
+        def_max = "4"
+      }
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+    }else if (STAGE=='PRD'){
+      if (Namespace == 'migration'){
+        def_min = "1"
+        def_max = "1"
+      }else{
+        def_min = "2"
+        def_max = "4"
+      }
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+    }else{
+      def_min = "2"
+      def_max = "4"
+      DefaultVersion = 'DM-R11.3.0.1.4.7-arm64'
+    }
+    break
+  case 'European_Union':
+    server_tag = 'd-server-02npce8a7tb1j0'
+    extension = '.eu'
+    if (STAGE=='CQA'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '4096m'
+      memory = '6144'
+    }else if (STAGE=='PRD'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '5120m'
+      memory = '8192'
+    }else{
+      DefaultVersion = 'DM-R11.3.0.1.4.7-arm64'
+    }
+    def_min = "2"
+    def_max = "4"
+    break
+  case 'Sydney':
+    server_tag = ' '
+    extension = '.au'
+    if (STAGE=='CQA'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '4096m'
+      memory = '6144'
+    }else if (STAGE=='PRD'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '5120m'
+      memory = '8192'
+    }else{
+      DefaultVersion = 'DM-R11.3.0.1.4.7-arm64'
+    }
+    def_min = "2"
+    def_max = "4"
+    break
+  case 'CapeTown':
+    server_tag = ' '
+    extension = '.co.za'
+    if (STAGE=='CQA'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '4096m'
+      memory = '6144'
+    }else if (STAGE=='PRD'){
+      DefaultVersion = 'DM-R11.3.0.1.6.1-arm64'
+      heap_size = '5120m'
+      memory = '8192'
+    }else{
+      DefaultVersion = 'DM-R11.3.0.1.4.7-arm64'
+    }
+    def_min = "2"
+    def_max = "4"
+    break
+}
+if (STAGE !="PRD"){
+    default_domain = "${STAGE.toLowerCase()}.debtmanager.crsoftwarecloud${extension}"
+}
+else{
+    default_domain = "debtmanager.crsoftwarecloud${extension}"
+}
+if (RegionHasPrivateLinkEnabled != 'No'){
+    RestAPITgArn= "Please populate target group arn for dm-restapi-pvtlink-tg"
+}
+else{
+    RestAPITgArn= "This field is not relevant when RegionHasPrivateLinkEnabled is No"
+}
+if (Action != 'Delete') {
+  param_map = [
+    ["parameter": "MaxCapacity", "default_value":"${def_max}"],
+    ["parameter": "MinCapacity", "default_value":"${def_min}"],
+    ["parameter": "DBHostName", "default_value":"db.${default_domain}"],
+    ["parameter": "AmqHostName","default_value":"amq.${default_domain}"],
+    ["parameter": "ContainerCpu","default_value":"4096"],
+    ["parameter": "ContainerMemory","default_value":"${memory}"],
+    ["parameter": "JavaHeapSize","default_value":"${heap_size}"],
+    ["parameter": "ImageName", "default_value": "${DefaultVersion}"],
+    ["parameter": "Namespace", "default_value":"${Namespace}"],
+    ["parameter": "AppName", "default_value": "RestAPI"],
+    ["parameter": "AppId", "default_value": "dm-${AWS_DEPLOYMENT_REGION}-001"],
+    ["parameter": "CostCenter", "default_value": "dm-${STAGE.toLowerCase()}"],
+    ["parameter": "Creator", "default_value":"TBD"],
+    ["parameter": "UpdatePvtLinkTG", "default_value":"${RegionHasPrivateLinkEnabled}"],
+    ["parameter": "DMRestAPIPvtLinkTGARN", "default_value":"${RestAPITgArn}"],
+    ["parameter": "Owner", "default_value":"TBD"],
+    ["parameter": "Type", "default_value": stage_tag]
+  ]
+  html_to_be_rendered = "<table><tr>"
+  param_list = param_map
+  param_list.each { action ->
+    html_to_be_rendered = """
+      ${html_to_be_rendered}
+      <tr>
+      <td>
+      <label title=\"${action.parameter}\" class=\" \">${action.parameter}</label>
+      <input type=\"hidden\" class=\" \" name=\"value\" value=${action.parameter}>
+      </td>
+      <td>
+      <input type=\"text\" class=\" \"  size=\"50\" name=\"value\" value=\"${action.default_value}\" > </br>
+      </td>
+      </tr>
+    """
+  }
+  html_to_be_rendered = "${html_to_be_rendered}</tr></table>"
+  return html_to_be_rendered
+}
+else {
+  return "No RFC Information required for Delete Action"
+}
