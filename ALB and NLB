@@ -1,170 +1,82 @@
-[root@test5 dm-fit-apps]# docker logs cos-service
-08:13:43,736 |-INFO in ch.qos.logback.classic.LoggerContext[default] - This is logback-classic version 1.5.12
-08:13:43,802 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - Here is a list of configurators discovered as a service, by rank:
-08:13:43,803 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 -   org.springframework.boot.logging.logback.RootLogLevelConfigurator
-08:13:43,803 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - They will be invoked in order until ExecutionStatus.DO_NOT_INVOKE_NEXT_IF_ANY is returned.
-08:13:43,803 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - Constructed configurator of type class org.springframework.boot.logging.logback.RootLogLevelConfigurator
-08:13:43,893 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - org.springframework.boot.logging.logback.RootLogLevelConfigurator.configure() call lasted 2 milliseconds. ExecutionStatus=INVOKE_NEXT_IF_ANY
-08:13:43,893 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - Trying to configure with ch.qos.logback.classic.joran.SerializedModelConfigurator08:13:43,894 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - Constructed configurator of type class ch.qos.logback.classic.joran.SerializedModelConfigurator08:13:43,958 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Could NOT find resource [logback-test.scmo]
-08:13:44,009 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Could NOT find resource [logback.scmo]08:13:44,009 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - ch.qos.logback.classic.joran.SerializedModelConfigurator.configure() call lasted 115 milliseconds. ExecutionStatus=INVOKE_NEXT_IF_ANY08:13:44,009 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - Trying to configure with ch.qos.logback.classic.util.DefaultJoranConfigurator
-08:13:44,010 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - Constructed configurator of type class ch.qos.logback.classic.util.DefaultJoranConfigurator08:13:44,011 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Could NOT find resource [logback-test.xml]
-08:13:44,012 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Could NOT find resource [logback.xml]08:13:44,012 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - ch.qos.logback.classic.util.DefaultJoranConfigurator.configure() call lasted 2 milliseconds. ExecutionStatus=INVOKE_NEXT_IF_ANY08:13:44,012 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - Trying to configure with ch.qos.logback.classic.BasicConfigurator
-08:13:44,016 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - Constructed configurator of type class ch.qos.logback.classic.BasicConfigurator08:13:44,016 |-INFO in ch.qos.logback.classic.BasicConfigurator@5b04476e - Setting up default configuration.
-08:13:44,215 |-INFO in ch.qos.logback.classic.util.ContextInitializer@4264b240 - ch.qos.logback.classic.BasicConfigurator.configure() call lasted 199 milliseconds. ExecutionStatus=NEUTRAL
-08:13:51,392 |-INFO in ConfigurationWatchList(mainURL=jar:nested:/usr/app/cos-service.jar/!BOOT-INF/classes/!/logback-spring.xml, fileWatchList={}, urlWatchList=[}) - URL [jar:nested:/usr/app/cos-service.jar/!BOOT-INF/classes/!/logback-spring.xml] is not of type file
-08:13:52,459 |-INFO in ch.qos.logback.core.joran.util.ConfigurationWatchListUtil@c260bdc - Adding [jar:nested:/usr/app/cos-service.jar/!BOOT-INF/lib/spring-boot-3.4.1.jar!/org/springframework/boot/logging/logback/defaults.xml] to configuration watch list.
-08:13:52,464 |-INFO in ConfigurationWatchList(mainURL=jar:nested:/usr/app/cos-service.jar/!BOOT-INF/classes/!/logback-spring.xml, fileWatchList={}, urlWatchList=[}) - Cannot watch [jar:nested:/usr/app/cos-service.jar/!BOOT-INF/lib/spring-boot-3.4.1.jar!/org/springframework/boot/logging/logback/defaults.xml] as its protocol is not one of file, http or https.
-08:13:52,583 |-INFO in ch.qos.logback.core.model.processor.ConversionRuleModelHandler - registering conversion word applicationName with class [org.springframework.boot.logging.logback.ApplicationNameConverter]
-08:13:52,583 |-INFO in ch.qos.logback.core.model.processor.ConversionRuleModelHandler - registering conversion word clr with class [org.springframework.boot.logging.logback.ColorConverter]
-08:13:52,583 |-INFO in ch.qos.logback.core.model.processor.ConversionRuleModelHandler - registering conversion word correlationId with class [org.springframework.boot.logging.logback.CorrelationIdConverter]
-08:13:52,583 |-INFO in ch.qos.logback.core.model.processor.ConversionRuleModelHandler - registering conversion word esb with class [org.springframework.boot.logging.logback.EnclosedInSquareBracketsConverter]
-08:13:52,583 |-INFO in ch.qos.logback.core.model.processor.ConversionRuleModelHandler - registering conversion word wex with class [org.springframework.boot.logging.logback.WhitespaceThrowableProxyConverter]
-08:13:52,583 |-INFO in ch.qos.logback.core.model.processor.ConversionRuleModelHandler - registering conversion word wEx with class [org.springframework.boot.logging.logback.ExtendedWhitespaceThrowableProxyConverter]
-08:13:52,587 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "%clr(%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}){faint} %clr(%5p){} %clr(1){magenta} %clr(--- %esb(){APPLICATION_NAME}%esb{APPLICATION_GROUP}[%15.15t] ){faint}%clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx" substituted for "${CONSOLE_LOG_PATTERN:-%clr(%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd'T'HH:mm:ss.SSSXXX}}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}){} %clr(${PID:-}){magenta} %clr(--- %esb(){APPLICATION_NAME}%esb{APPLICATION_GROUP}[%15.15t] ${LOG_CORRELATION_PATTERN:-}){faint}%clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}}"
-08:13:52,587 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "UTF-8" substituted for "${CONSOLE_LOG_CHARSET:-${file.encoding:-UTF-8}}"
-08:13:52,587 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "TRACE" substituted for "${CONSOLE_LOG_THRESHOLD:-TRACE}"
-08:13:52,587 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "" substituted for "${CONSOLE_LOG_STRUCTURED_FORMAT:-}"
-08:13:52,587 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p 1 --- %esb(){APPLICATION_NAME}%esb{APPLICATION_GROUP}[%t] %-40.40logger{39} : %m%n%wEx" substituted for "${FILE_LOG_PATTERN:-%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd'T'HH:mm:ss.SSSXXX}} ${LOG_LEVEL_PATTERN:-%5p} ${PID:-} --- %esb(){APPLICATION_NAME}%esb{APPLICATION_GROUP}[%t] ${LOG_CORRELATION_PATTERN:-}%-40.40logger{39} : %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}}"
-08:13:52,587 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "UTF-8" substituted for "${FILE_LOG_CHARSET:-${file.encoding:-UTF-8}}"
-08:13:52,587 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "TRACE" substituted for "${FILE_LOG_THRESHOLD:-TRACE}"
-08:13:52,587 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "" substituted for "${FILE_LOG_STRUCTURED_FORMAT:-}"
-08:13:52,612 |-INFO in ch.qos.logback.core.joran.util.ConfigurationWatchListUtil@c260bdc - Adding [jar:nested:/usr/app/cos-service.jar/!BOOT-INF/lib/spring-boot-3.4.1.jar!/org/springframework/boot/logging/logback/console-appender.xml] to configuration watch list.
-08:13:52,612 |-INFO in ConfigurationWatchList(mainURL=jar:nested:/usr/app/cos-service.jar/!BOOT-INF/classes/!/logback-spring.xml, fileWatchList={}, urlWatchList=[}) - Cannot watch [jar:nested:/usr/app/cos-service.jar/!BOOT-INF/lib/spring-boot-3.4.1.jar!/org/springframework/boot/logging/logback/console-appender.xml] as its protocol is not oneof file, http or https.
-08:13:52,655 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "logs/cos-rolling.log" substituted for "${LOG_FILE:-${LOG_PATH:-${LOG_TEMP:-${java.io.tmpdir:-/tmp}}/}spring.log}"
-08:13:52,656 |-INFO in ch.qos.logback.core.joran.util.ConfigurationWatchListUtil@c260bdc - Adding [jar:nested:/usr/app/cos-service.jar/!BOOT-INF/lib/spring-boot-3.4.1.jar!/org/springframework/boot/logging/logback/file-appender.xml] to configuration watch list.
-08:13:52,656 |-INFO in ConfigurationWatchList(mainURL=jar:nested:/usr/app/cos-service.jar/!BOOT-INF/classes/!/logback-spring.xml, fileWatchList={}, urlWatchList=[}) - Cannot watch [jar:nested:/usr/app/cos-service.jar/!BOOT-INF/lib/spring-boot-3.4.1.jar!/org/springframework/boot/logging/logback/file-appender.xml] as its protocol is not one offile, http or https.
-08:13:52,726 |-WARN in ch.qos.logback.classic.model.processor.ConfigurationModelHandlerFull - Missing watchable .xml or .properties files.
-08:13:52,726 |-WARN in ch.qos.logback.classic.model.processor.ConfigurationModelHandlerFull - Watching .xml files requires that the main configuration file is reachable asa URL
-08:13:52,761 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.apache.catalina.startup.DigesterFactory] to ERROR
-08:13:52,762 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@2783717b - Propagating ERROR level on Logger[org.apache.catalina.startup.DigesterFactory] onto the JUL framework
-08:13:52,763 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.apache.catalina.util.LifecycleBase] to ERROR
-08:13:52,763 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@2783717b - Propagating ERROR level on Logger[org.apache.catalina.util.LifecycleBase] onto the JUL framework
-08:13:52,763 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.apache.coyote.http11.Http11NioProtocol] to WARN
-08:13:52,763 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@2783717b - Propagating WARN level on Logger[org.apache.coyote.http11.Http11NioProtocol] onto the JUL framework
-08:13:52,763 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.apache.sshd.common.util.SecurityUtils] to WARN
-08:13:52,763 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@2783717b - Propagating WARN level on Logger[org.apache.sshd.common.util.SecurityUtils] onto the JULframework
-08:13:52,778 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.apache.tomcat.util.net.NioSelectorPool] to WARN
-08:13:52,778 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@2783717b - Propagating WARN level on Logger[org.apache.tomcat.util.net.NioSelectorPool] onto the JUL framework
-08:13:52,779 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.eclipse.jetty.util.component.AbstractLifeCycle] to ERROR
-08:13:52,779 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@2783717b - Propagating ERROR level on Logger[org.eclipse.jetty.util.component.AbstractLifeCycle] onto the JUL framework
-08:13:52,779 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.hibernate.validator.internal.util.Version] to WARN
-08:13:52,779 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@2783717b - Propagating WARN level on Logger[org.hibernate.validator.internal.util.Version] onto theJUL framework
-08:13:52,779 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [org.springframework.boot.actuate.endpoint.jmx] to WARN
-08:13:52,779 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@2783717b - Propagating WARN level on Logger[org.springframework.boot.actuate.endpoint.jmx] onto theJUL framework
-08:13:52,779 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [CONSOLE]
-08:13:52,779 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.ConsoleAppender]
-08:13:52,829 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "TRACE" substituted for "${CONSOLE_LOG_THRESHOLD}"
-08:13:52,831 |-INFO in ch.qos.logback.core.model.processor.ImplicitModelHandler - Assuming default type [ch.qos.logback.classic.encoder.PatternLayoutEncoder] for [encoder]property
-08:13:52,831 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "%d{ISO8601} %-5level [%t] %C{26}.%M {%X}: %msg%n%throwable" substituted for "${CONSOLE_LOG_PATTERN}"
-08:13:52,832 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "UTF-8" substituted for "${CONSOLE_LOG_CHARSET}"
-08:13:53,091 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [FILE]
-08:13:53,091 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.rolling.RollingFileAppender]
-08:13:53,166 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "TRACE" substituted for "${FILE_LOG_THRESHOLD}"
-08:13:53,166 |-INFO in ch.qos.logback.core.model.processor.ImplicitModelHandler - Assuming default type [ch.qos.logback.classic.encoder.PatternLayoutEncoder] for [encoder]property
-08:13:53,167 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "%d{ISO8601} %-5level [%t] %C{26}.%M {%X}: %msg%n%throwable" substituted for "${FILE_LOG_PATTERN}"
-08:13:53,167 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "UTF-8" substituted for "${FILE_LOG_CHARSET}"
-08:13:53,168 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "logs/cos-rolling.log" substituted for "${LOG_FILE}"
-08:13:53,215 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "logs/cos-rolling.log.%d{yyyy-MM-dd}.%i.gz" substituted for "${LOGBACK_ROLLINGPOLICY_FILE_NAME_PATTERN:-${LOG_FILE}.%d{yyyy-MM-dd}.%i.gz}"
-08:13:53,215 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "false" substituted for "${LOGBACK_ROLLINGPOLICY_CLEAN_HISTORY_ON_START:-false}"
-08:13:53,215 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "10MB" substituted for "${LOGBACK_ROLLINGPOLICY_MAX_FILE_SIZE:-10MB}"
-08:13:53,216 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "0" substituted for "${LOGBACK_ROLLINGPOLICY_TOTAL_SIZE_CAP:-0}"
-08:13:53,229 |-INFO in c.q.l.core.rolling.SizeAndTimeBasedRollingPolicy@1995952705 - setting totalSizeCap to 0 Bytes
-08:13:53,230 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@75e01201 - value "7" substituted for "${LOGBACK_ROLLINGPOLICY_MAX_HISTORY:-7}"
-08:13:53,234 |-INFO in c.q.l.core.rolling.SizeAndTimeBasedRollingPolicy@1995952705 - Archive files will be limited to [10 MB] each.
-08:13:53,288 |-INFO in c.q.l.core.rolling.SizeAndTimeBasedRollingPolicy@1995952705 - Will use gz compression
-08:13:53,318 |-INFO in c.q.l.core.rolling.SizeAndTimeBasedRollingPolicy@1995952705 - Will use the pattern logs/cos-rolling.log.%d{yyyy-MM-dd}.%i for the active file
-08:13:53,693 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFileNamingAndTriggeringPolicy@4a335fa8 - The date pattern is 'yyyy-MM-dd' from file name pattern 'logs/cos-rolling.log.%d{yyyy-MM-dd}.%i.gz'.
-08:13:53,693 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFileNamingAndTriggeringPolicy@4a335fa8 - Roll-over at midnight.
-08:13:53,766 |-INFO in ch.qos.logback.core.rolling.SizeAndTimeBasedFileNamingAndTriggeringPolicy@4a335fa8 - Setting initial period to 2025-04-10T08:13:53.740Z
-08:13:53,788 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[FILE] - Active log file name: logs/cos-rolling.log
-08:13:53,811 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[FILE] - File property is set to [logs/cos-rolling.log]
-08:13:53,817 |-INFO in ch.qos.logback.classic.model.processor.RootLoggerModelHandler - Setting level of ROOT logger to INFO
-08:13:53,817 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@2783717b - Propagating INFO level on Logger[ROOT] onto the JUL framework
-08:13:53,817 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[ROOT]
-08:13:53,818 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [FILE] to Logger[ROOT]
-08:13:53,818 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [com.crsoftware.cos] to DEBUG
-08:13:53,818 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@2783717b - Propagating DEBUG level on Logger[com.crsoftware.cos] onto the JUL framework
-08:13:53,818 |-INFO in ch.qos.logback.core.model.processor.DefaultProcessor@3f363cf5 - End of configuration.
-08:13:53,828 |-INFO in org.springframework.boot.logging.logback.SpringBootJoranConfigurator@3829ac1 - Registering current configuration as safe fallback point
+http://test8.dm.crsdev.com/logs/ getting 403 Forbidden!
 
+  dm-fit-apps:
+    image: ${ECR_REPO}/dm-fit-apps:${DM_BUILD_TAG}
+    container_name: dm-fit-apps
+    ports:
+      - 80:80
+    volumes:
+      - ${NGINX_CONFIG}/dm-fit-apps:/usr/share/nginx/servers
+      - /opt/dm-container/logs:/usr/share/nginx/html/logs
+      - ${NGINX_HTTP}/CRSHelp:/usr/share/nginx/html/CRSHelp
+      - ${NGINX_HTTP}/DM_BrowserHelp:/usr/share/nginx/html/DM_BrowserHelp
+      - ${NGINX_HTTP}/bpo-help:/usr/share/nginx/html/bpo-help
+      - ${NGINX_HTTP}/bpo:/usr/share/nginx/html/bpo
+      - ${NGINX_HTTP}/cos-help:/usr/share/nginx/html/cos-help
+      - ${NGINX_HTTP}/cos:/usr/share/nginx/html/cos
+===========================================
+[root@test8 dm-container]# ls -lrt  (/opt/dm-container/)
+total 36
+-rw-r--r--. 1 root root  3343 Apr 16 07:22 Jenkinsfile.test
+-rw-r--r--. 1 root root 32417 Apr 16 07:22 Jenkinsfile.aio-ami-pipeline
+drwxr-xr-x. 6 root root    59 Apr 16 13:14 logs
+drwxr-xr-x. 2 root root    69 Apr 16 14:26 docker-compose
+drwxr-xr-x. 7 root root   129 Apr 16 14:40 scripts
 
-  .   ____          _            __ _ _
- /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
-( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
- \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
-  '  |____| .__|_| |_|_| |_\__, | / / / /
- =========|_|==============|___/=/_/_/_/
+=============================================================
+/usr/share/nginx/html # ls -lrt
+total 192
+-rw-r--r--    1 root     root           208 Apr  2 07:21 index.html
+-rw-r--r--    1 root     root           278 Apr  2 07:21 500.html
+-rw-r--r--    1 root     root           282 Apr  2 07:21 404.html
+-rw-r--r--    1 root     root           272 Apr  2 07:21 403.html
+drwxr-xr-x    1 root     root        114688 Apr  2 13:53 debtmanager
+drwxrwxrwx   10 root     root         16384 Apr  3 14:12 CRSHelp
+drwxrwxrwx    5 root     root           103 Apr  3 15:44 DM_BrowserHelp
+drwxr-xr-x    5 root     root           103 Apr 16 07:49 bpo-help
+drwxr-xr-x    3 root     root         16384 Apr 16 07:49 bpo
+drwxr-xr-x    6 root     root           113 Apr 16 07:49 cos-help
+drwxr-xr-x    3 root     root         16384 Apr 16 07:49 cos
+drwxr-xr-x    6 root     root            59 Apr 16 13:14 logs
+=================
 
- :: Spring Boot ::                (v3.4.1)
+root@test8 dm-fit-apps]# cat dm-fit-apps.conf
+resolver 127.0.0.11 valid=5s;
 
-2025-04-10 08:13:55,647 INFO  [main] o.s.boot.StartupInfoLogger.logStarting {}: Starting CosApplication v2025.1.0-7 using Java 17.0.14 with PID 1 (/usr/app/cos-service.jarstarted by root in /usr/app)
-2025-04-10 08:13:55,659 DEBUG [main] o.s.boot.StartupInfoLogger.logStarting {}: Running with Spring Boot v3.4.1, Spring v6.2.1
-2025-04-10 08:13:55,669 INFO  [main] o.s.boot.SpringApplication.logStartupProfileInfo {}: The following 1 profile is active: "oncloud"
-2025-04-10 08:14:14,834 INFO  [main] o.s.d.r.c.RepositoryConfigurationDelegate.registerRepositoriesIn {}: Bootstrapping Spring Data JPA repositories in DEFAULT mode.
-2025-04-10 08:14:17,852 INFO  [main] o.s.d.r.c.RepositoryConfigurationDelegate.registerRepositoriesIn {}: Finished Spring Data repository scanning in 2895 ms. Found 21 JPArepository interfaces.
-2025-04-10 08:14:31,239 INFO  [main] o.s.b.w.e.t.TomcatWebServer.initialize {}: Tomcat initialized with port 9090 (http)
-2025-04-10 08:14:31,350 INFO  [main] o.a.j.logging.DirectJDKLog.log {}: Starting service [Tomcat]
-2025-04-10 08:14:31,392 INFO  [main] o.a.j.logging.DirectJDKLog.log {}: Starting Servlet engine: [Apache Tomcat/10.1.34]
-2025-04-10 08:14:31,906 INFO  [main] o.a.j.logging.DirectJDKLog.log {}: Initializing Spring embedded WebApplicationContext
-2025-04-10 08:14:31,927 INFO  [main] o.s.b.w.s.c.ServletWebServerApplicationContext.prepareWebApplicationContext {}: Root WebApplicationContext: initialization completed in 35210 ms
-2025-04-10 08:14:35,907 INFO  [main] o.h.j.i.util.LogHelper.logPersistenceUnitInformation {}: HHH000204: Processing PersistenceUnitInfo [name: default]
-2025-04-10 08:14:36,546 INFO  [main] org.hibernate.Version.logVersion {}: HHH000412: Hibernate ORM core version 6.6.4.Final
-2025-04-10 08:14:36,608 WARN  [main] o.h.j.b.i.EntityManagerFactoryBuilderImpl.normalizeSettings {}: HHH90000021: Encountered deprecated setting [javax.persistence.sharedCache.mode], use [jakarta.persistence.sharedCache.mode] instead
-2025-04-10 08:14:37,054 WARN  [main] o.h.b.i.MetadataBuilderImpl$MetadataBuildingOptionsImpl.lambda$new$1 {}: HHH90000021: Encountered deprecated setting [javax.persistence.sharedCache.mode], use [jakarta.persistence.sharedCache.mode] instead
-2025-04-10 08:14:37,104 INFO  [main] o.h.c.i.RegionFactoryInitiator.initiateService {}: HHH000025: Second-level cache region factory [org.hibernate.cache.jcache.internal.JCacheRegionFactory]
-2025-04-10 08:14:41,340 INFO  [main] o.s.o.j.p.SpringPersistenceUnitInfo.addTransformer {}: No LoadTimeWeaver setup: ignoring JPA class transformer
-2025-04-10 08:14:41,644 INFO  [main] c.z.h.HikariDataSource.getConnection {}: HikariPool-1 - Starting...
-2025-04-10 08:14:43,037 INFO  [main] c.z.hikari.pool.HikariPool.checkFailFast {}: HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@3369e2ce
-2025-04-10 08:14:43,041 INFO  [main] c.z.h.HikariDataSource.getConnection {}: HikariPool-1 - Start completed.
-2025-04-10 08:14:43,369 WARN  [main] o.h.e.j.d.i.DialectFactoryImpl.constructDialect {}: HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
-2025-04-10 08:14:43,625 INFO  [main] o.h.e.j.e.i.JdbcEnvironmentInitiator.initiateService {}: HHH10001005: Database info:
-        Database JDBC URL [Connecting through datasource 'HikariDataSource (HikariPool-1)']
-        Database driver: undefined/unknown
-        Database version: 15.12
-        Autocommit mode: undefined/unknown
-        Isolation level: undefined/unknown
-        Minimum pool size: undefined/unknown
-        Maximum pool size: undefined/unknown
-2025-04-10 08:14:52,088 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'default-update-timestamps-region' created in EhcacheManager.
-2025-04-10 08:14:52,249 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'default-query-results-region' created in EhcacheManager.
-2025-04-10 08:14:54,010 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.flow.FlowInstanceSearch' created in EhcacheManager.
-2025-04-10 08:14:54,091 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.role.UserRole' created in EhcacheManager.
-2025-04-10 08:14:54,141 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.tenant.TenantConfig' created in EhcacheManager.
-2025-04-10 08:14:54,210 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.AuditLog' created in EhcacheManager.
-2025-04-10 08:14:54,248 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.tenant.TenantUser' created in EhcacheManager.
-2025-04-10 08:14:54,288 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.flow.FlowStepInstance' created in EhcacheManager.
-2025-04-10 08:14:54,341 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.tenant.TenantEnvironmentVariable' created in EhcacheManager.
-2025-04-10 08:14:54,402 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.User' created in EhcacheManager.
-2025-04-10 08:14:54,422 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.authentication.OAuth2ClientAdditionalInfo' created in EhcacheManager.
-2025-04-10 08:14:54,456 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.flow.FlowDefinitionVersion' created in EhcacheManager.
-2025-04-10 08:14:54,532 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.tenant.TenantUserRole' created in EhcacheManager.
-2025-04-10 08:14:54,592 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.flow.FlowStepType' created in EhcacheManager.
-2025-04-10 08:14:54,688 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.role.Privilege' created in EhcacheManager.
-2025-04-10 08:14:54,698 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.tenant.Tenant' created in EhcacheManager.
-2025-04-10 08:14:54,809 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.flow.FlowStepDependency' created in EhcacheManager.
-2025-04-10 08:14:54,821 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.flow.FlowDefinition' created in EhcacheManager.
-2025-04-10 08:14:54,859 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.authentication.OAuth2Client' created in EhcacheManager.
-2025-04-10 08:14:54,917 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.authentication.BasicAuthCredential' created in EhcacheManager.
-2025-04-10 08:14:54,940 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.tenant.TenantConfigItem' created in EhcacheManager.
-2025-04-10 08:14:55,009 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.flow.FlowInstance' created in EhcacheManager.
-2025-04-10 08:14:55,028 INFO  [main] o.e.core.EhcacheManager.createCache {}: Cache 'com.crsoftware.cos.jpa.model.role.RolePrivilege' created in EhcacheManager.
-2025-04-10 08:15:07,018 INFO  [main] o.h.e.t.j.p.i.JtaPlatformInitiator.initiateService {}: HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
-2025-04-10 08:15:07,048 INFO  [main] o.s.o.j.AbstractEntityManagerFactoryBean.buildNativeEntityManagerFactory {}: Initialized JPA EntityManagerFactory for persistence unit'default'
-2025-04-10 08:15:10,458 INFO  [main] o.s.d.j.r.q.QueryEnhancerFactory.<clinit> {}: Hibernate is in classpath; If applicable, HQL parser will be used.
-2025-04-10 08:15:20,051 DEBUG [main] o.s.w.f.GenericFilterBean.init {}: Filter 'jwtAuthenticationFilter' configured for use
-2025-04-10 08:15:20,055 DEBUG [main] o.s.w.f.GenericFilterBean.init {}: Filter 'cosBearerTokenAuthenticationFilter' configured for use
-2025-04-10 08:15:20,058 DEBUG [main] o.s.w.f.GenericFilterBean.init {}: Filter 'multiTenantFilter' configured for use
-2025-04-10 08:15:31,593 INFO  [main] o.s.b.a.e.w.EndpointLinksResolver.<init> {}: Exposing 15 endpoints beneath base path '/actuator'
-2025-04-10 08:15:34,748 INFO  [main] o.s.b.w.e.t.TomcatWebServer.start {}: Tomcat started on port 9090 (http) with context path '/cos-service'
-2025-04-10 08:15:34,863 DEBUG [main] c.c.c.s.TenantExternalHttpReqLogClearScheduler.onApplicationEvent {}: Scheduling log cleanup job for each tenant.
-2025-04-10 08:15:35,109 WARN  [main] c.c.c.s.TenantExternalHttpReqLogClearScheduler.scheduleLogCleanUpJob {}: LOG cleanup cron expression is not yet configured for the tenant base
-2025-04-10 08:15:35,110 WARN  [main] c.c.c.s.TenantExternalHttpReqLogClearScheduler.scheduleLogCleanUpJob {}: Default cron expression will be used to configure log cleanupscheduler
-2025-04-10 08:15:35,111 INFO  [main] c.c.c.s.t.TenantConfigItemService.retrieveByItemKey {}: Retrieving Config item for the key com.crs.cos.tenant.logs.clear.cron
-2025-04-10 08:15:35,151 INFO  [main] c.c.c.s.t.TenantConfigItemService.retrieveByItemKey {}: Done retrieving config item
-2025-04-10 08:15:35,156 WARN  [main] c.c.c.s.TenantExternalHttpReqLogClearScheduler.scheduleLogCleanUpJob {}: LOG cleanup thresh hold  days is not yet configured for the tenant base
-2025-04-10 08:15:35,156 WARN  [main] c.c.c.s.TenantExternalHttpReqLogClearScheduler.scheduleLogCleanUpJob {}: Default cleanup thresh hold  days will be used to configure log cleanup scheduler
-2025-04-10 08:15:35,157 INFO  [main] c.c.c.s.t.TenantConfigItemService.retrieveByItemKey {}: Retrieving Config item for the key com.crs.cos.tenant.logs.clear.threshold.days
-2025-04-10 08:15:35,179 INFO  [main] c.c.c.s.t.TenantConfigItemService.retrieveByItemKey {}: Done retrieving config item
-2025-04-10 08:15:35,235 INFO  [main] c.c.c.s.TenantExternalHttpReqLogClearScheduler.scheduleLogCleanUpJob {}: Log cleanup job scheduled successfully for tenant base
-2025-04-10 08:15:35,235 DEBUG [main] c.c.c.s.TenantExternalHttpReqLogClearScheduler.onApplicationEvent {}: Completed scheduling log cleanup job for each tenant.
-2025-04-10 08:15:35,237 INFO  [main] o.s.boot.StartupInfoLogger.logStarted {}: Started CosApplication in 109.635 seconds (process running for 115.588)
+server {
+    listen              80;
+    server_name         _;
+
+    error_page          403                /403.html;
+    error_page          404                /404.html;
+    error_page          500 502 503 504    /500.html;
+
+    # Static Pages
+    location / {
+        root   /usr/share/nginx/html;
+        index  index.html index.htm;
+    }
+    location /logs/ {
+        alias   /usr/share/nginx/html/logs/;
+        autoindex on;
+        default_type text/plain;
+        add_header Content-Disposition inline;
+    }
+    # Keycloak
+    location /keycloak/ {
+        return 301 http://$host:8082;
+    }
+
+    # # Tenant Admin
+    # location /dm-ta-services/ {
+    #     proxy_set_header X-Real-IP $remote_addr;
+
+    #     proxy_pass http://dm-ta:9090/dm-ta-services/;
+    # }
+
+    # location /dm-ta/ {
+    #     proxy_set_header X-Real-IP $remote_addr;
+
+    #     proxy_pass http://dm-ta-ui:81/;
+    # }
+}
